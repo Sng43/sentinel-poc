@@ -1,0 +1,36 @@
+# ── Python ───────────────────────────────────────────────
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.python-version
+.ipynb_checkpoints/
+
+# ── OS / editor ──────────────────────────────────────────
+.DS_Store
+.idea/
+.vscode/
+
+# ── Data (open-access demo is redistributable, but keep the
+#    repo lean; full MIMIC-IV is gated and must NEVER be committed) ──
+project_sentinel/data/raw/*
+project_sentinel/data/interim/*
+project_sentinel/data/processed/*
+!project_sentinel/data/raw/.gitkeep
+!project_sentinel/data/interim/.gitkeep
+!project_sentinel/data/processed/.gitkeep
+
+# Loose MIMIC demo download outside the data/ tree (downloader default)
+mimic_iv_demo/
+mimic_demo_project/mimic_iv_demo/
+
+# ── Model + output artifacts ─────────────────────────────
+project_sentinel/models/
+project_sentinel/outputs/figures/*
+project_sentinel/outputs/reports/*
+project_sentinel/outputs/models/*
+project_sentinel/outputs/**/*.png
+project_sentinel/outputs/**/*.json
+project_sentinel/outputs/**/*.csv
+!project_sentinel/outputs/**/.gitkeep
