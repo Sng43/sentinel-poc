@@ -217,26 +217,20 @@ def add_rolling_features(
 
     grouped = df.groupby("patient_id", sort=False)
 
+    # Build all rolling columns first, then concat once — assigning them one at
+    # a time fragments the DataFrame and triggers pandas PerformanceWarnings.
+    new_cols: dict[str, pd.Series] = {}
     for w in windows:
         for v in rolling_vars:
-            col_mean = f"{v}_mean_{w}h"
-            col_std = f"{v}_std_{w}h"
-            col_min = f"{v}_min_{w}h"
-            col_max = f"{v}_max_{w}h"
-
             rolling = grouped[v].rolling(window=w, min_periods=1)
-            df[col_mean] = rolling.mean().droplevel(0)
-            df[col_min] = rolling.min().droplevel(0)
-            df[col_max] = rolling.max().droplevel(0)
+            new_cols[f"{v}_mean_{w}h"] = rolling.mean().droplevel(0)
+            new_cols[f"{v}_min_{w}h"] = rolling.min().droplevel(0)
+            new_cols[f"{v}_max_{w}h"] = rolling.max().droplevel(0)
+            new_cols[f"{v}_std_{w}h"] = grouped[v].rolling(window=w, min_periods=2).std().droplevel(0)
 
-            rolling_std = grouped[v].rolling(window=w, min_periods=2)
-            df[col_std] = rolling_std.std().droplevel(0)
+    df = pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
 
-    n_new = sum(
-        1 for c in df.columns
-        if any(c.endswith(f"_{w}h") for w in windows)
-    )
-    logger.info("Added %d rolling-window features (windows=%s).", n_new, windows)
+    logger.info("Added %d rolling-window features (windows=%s).", len(new_cols), windows)
     return df
 
 
