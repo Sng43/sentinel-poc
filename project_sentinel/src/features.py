@@ -29,18 +29,18 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 VITAL_COLUMNS: list[str] = [
-    "HR", "O2Sat", "Temp", "SBP", "MAP", "DBP", "Resp", "EtCO2",
+    "HR", "O2Sat", "Temp", "SBP", "MAP", "DBP", "Resp",
 ]
 
 LAB_COLUMNS: list[str] = [
-    "BaseExcess", "HCO3", "FiO2", "pH", "PaCO2", "SaO2", "AST", "BUN",
-    "Alkalinephos", "Calcium", "Chloride", "Creatinine", "Bilirubin_direct",
+    "BaseExcess", "HCO3", "pH", "PaCO2", "SaO2", "AST", "BUN",
+    "Alkalinephos", "Calcium", "Chloride", "Creatinine",
     "Glucose", "Lactate", "Magnesium", "Phosphate", "Potassium",
-    "Bilirubin_total", "TroponinI", "Hct", "Hgb", "PTT", "WBC",
+    "Bilirubin_total", "Hct", "Hgb", "PTT", "WBC",
     "Fibrinogen", "Platelets",
 ]
 
-DEMO_COLUMNS: list[str] = ["Age", "Gender", "Unit1", "Unit2", "HospAdmTime"]
+DEMO_COLUMNS: list[str] = ["Age", "Gender"]
 
 # Key lab columns whose rolling statistics are computed alongside vitals.
 _KEY_LAB_COLUMNS: list[str] = [
@@ -128,12 +128,7 @@ def impute_values(df: pd.DataFrame) -> pd.DataFrame:
         DataFrame with labs and vitals forward-/backward-filled.
     """
     df = df.copy()
-
-    if "patient_id" not in df.columns:
-        logger.warning("'patient_id' not in columns — imputing without grouping.")
-        _impute_ungrouped(df)
-        return df
-
+    assert "patient_id" in df.columns, "impute_values requires the canonical 'patient_id' column"
     grouped = df.groupby("patient_id", sort=False)
 
     # --- Labs: ffill + bfill ---
@@ -156,16 +151,6 @@ def impute_values(df: pd.DataFrame) -> pd.DataFrame:
         n_remaining,
     )
     return df
-
-
-def _impute_ungrouped(df: pd.DataFrame) -> None:
-    """In-place fallback imputation when patient_id is absent."""
-    for col in LAB_COLUMNS:
-        if col in df.columns:
-            df[col] = df[col].ffill(limit=4).bfill(limit=4)
-    for col in VITAL_COLUMNS:
-        if col in df.columns:
-            df[col] = df[col].ffill(limit=4)
 
 
 # ---------------------------------------------------------------------------
