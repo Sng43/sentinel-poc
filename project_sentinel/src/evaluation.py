@@ -15,8 +15,8 @@ from sklearn.metrics import (
     roc_curve,
     precision_recall_curve,
     confusion_matrix,
-    calibration_curve,
 )
+from sklearn.calibration import calibration_curve
 
 def expected_calibration_error(y_true: np.ndarray, y_prob: np.ndarray, n_bins: int = 10) -> float:
     """Calculate the Expected Calibration Error (ECE)."""
