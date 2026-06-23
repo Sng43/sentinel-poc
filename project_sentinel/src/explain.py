@@ -30,6 +30,8 @@ import numpy as np
 import pandas as pd
 import shap
 
+from .conformal import INDETERMINATE, conformal_label, indeterminate_rate
+
 logger = logging.getLogger(__name__)
 
 # ─── Constants ────────────────────────────────────────────────────────────────
@@ -77,6 +79,11 @@ _RISK_ACTIONS: dict[str, str] = {
         "Increase creatinine monitoring frequency to q4h"
     ),
     "LOW": "Continue standard monitoring. Reassess in 6 hours",
+    "INDETERMINATE": (
+        "Model abstains — prediction is too uncertain to act on for this "
+        "patient (out-of-distribution / borderline). Rely on clinical "
+        "judgement and standard KDIGO monitoring; do not over-trust the score"
+    ),
 }
 
 # Features where a *positive* SHAP contribution generally corresponds to a
@@ -435,6 +442,7 @@ def generate_clinical_alert(
     feature_names: list[str],
     prediction_prob: float,
     threshold: float = _DEFAULT_THRESHOLD,
+    conformal_qhat: float | None = None,
 ) -> dict[str, Any]:
     """Build a structured clinical alert dict for one patient.
 
@@ -454,6 +462,10 @@ def generate_clinical_alert(
         Predicted probability of AKI within 24 h.
     threshold:
         Classification threshold (default 0.35).
+    conformal_qhat:
+        Optional split-conformal threshold. If given and the score falls in
+        the band ``[1 - qhat, qhat]``, ``risk_level`` becomes INDETERMINATE
+        (the model abstains) instead of HIGH/MEDIUM/LOW.
 
     Returns
     -------
@@ -463,7 +475,11 @@ def generate_clinical_alert(
         and ``recommended_action``.
     """
     # --- Risk classification -----------------------------------------------
-    if prediction_prob >= 0.5:
+    # Conformal abstention first: if the score is in the indeterminate band,
+    # the model declines to commit rather than guessing on an uncertain case.
+    if conformal_qhat is not None and conformal_label(prediction_prob, conformal_qhat) == INDETERMINATE:
+        risk_level = INDETERMINATE
+    elif prediction_prob >= 0.5:
         risk_level = "HIGH"
     elif prediction_prob >= threshold:
         risk_level = "MEDIUM"
@@ -509,6 +525,7 @@ def generate_sample_alerts(
     feature_names: list[str],
     output_path: str,
     n_alerts: int = 10,
+    conformal_qhat: float | None = None,
 ) -> list[dict[str, Any]]:
     """Generate clinical alerts for a sample of test patients.
 
@@ -587,6 +604,7 @@ def generate_sample_alerts(
             patient_row=patient_row,
             feature_names=feature_names,
             prediction_prob=float(y_prob[global_idx]),
+            conformal_qhat=conformal_qhat,
         )
         alerts.append(alert)
 
@@ -609,6 +627,7 @@ def run_explainability(
     y_prob: np.ndarray | pd.Series,
     feature_names: list[str],
     output_dir: str,
+    conformal_qhat: float | None = None,
 ) -> dict[str, Any]:
     """Execute the complete explainability pipeline.
 
@@ -655,7 +674,8 @@ def run_explainability(
     # 3 — Clinical alerts
     logger.info("Step 3/3: Generating sample clinical alerts …")
     alerts = generate_sample_alerts(
-        model, X_test, y_prob, feature_names, str(out / "sample_alerts.json")
+        model, X_test, y_prob, feature_names, str(out / "sample_alerts.json"),
+        conformal_qhat=conformal_qhat,
     )
 
     # --- Summary statistics ------------------------------------------------
@@ -669,6 +689,9 @@ def run_explainability(
         "alert_count": len(alerts),
         "output_dir": str(out.resolve()),
     }
+    if conformal_qhat is not None:
+        summary["conformal_qhat"] = conformal_qhat
+        summary["indeterminate_rate"] = indeterminate_rate(y_prob, conformal_qhat)
 
     logger.info(
         "Explainability pipeline complete — top features: %s",
