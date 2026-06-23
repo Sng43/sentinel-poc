@@ -48,10 +48,13 @@ _KEY_LAB_COLUMNS: list[str] = [
     "Glucose", "Potassium", "Hgb", "Hct",
 ]
 
-# Columns that should never appear as model features.
+# Columns that should never appear as model features: identifiers, timestamps,
+# and — critically — the labels/meta added downstream. Including any aki_label_*,
+# _aki_current, or valid_for_training column would leak the target into training.
 _EXCLUDE_FROM_FEATURES: set[str] = {
-    "patient_id", "ICULOS", "t_sepsis", "SepsisLabel",
+    "patient_id", "subject_id", "ICULOS", "t_sepsis", "SepsisLabel",
     "hospital_system", "AKI_label", "AKI_stage",
+    "_aki_current", "valid_for_training",
 }
 
 STAGE_1_FEATURES: list[str] = [
@@ -646,9 +649,9 @@ def get_all_features(df: pd.DataFrame) -> list[str]:
     """Return all engineered feature columns for the Stage-2 model.
 
     Every numeric column in *df* is included **except** identifiers,
-    timestamps, and target labels (``patient_id``, ``ICULOS``,
-    ``t_sepsis``, ``SepsisLabel``, ``hospital_system``, ``AKI_label``,
-    ``AKI_stage``).
+    timestamps, and the labels/meta added downstream — anything in
+    ``_EXCLUDE_FROM_FEATURES`` plus every ``aki_label_*`` horizon column.
+    This is what prevents the target from leaking into the feature set.
 
     Parameters
     ----------
@@ -661,5 +664,8 @@ def get_all_features(df: pd.DataFrame) -> list[str]:
         Sorted list of feature column names.
     """
     numeric_cols = df.select_dtypes(include="number").columns.tolist()
-    features = sorted(c for c in numeric_cols if c not in _EXCLUDE_FROM_FEATURES)
+    features = sorted(
+        c for c in numeric_cols
+        if c not in _EXCLUDE_FROM_FEATURES and not c.startswith("aki_label_")
+    )
     return features
