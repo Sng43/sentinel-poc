@@ -7,9 +7,11 @@ __pycache__/
 .python-version
 .ipynb_checkpoints/
 
-# ── OS / editor ──────────────────────────────────────────
+# ── OS / editor / agent tooling ──────────────────────────
 .DS_Store
 .idea/
+.claude/
+CLAUDE.md
 .vscode/
 
 # ── Data (open-access demo is redistributable, but keep the
