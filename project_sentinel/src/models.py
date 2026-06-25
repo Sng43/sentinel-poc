@@ -210,12 +210,12 @@ def train_xgb(
         pw = compute_pos_weight(y_train)
         params = get_xgb_params(pos_weight=pw)
 
-    model = xgb.XGBClassifier(**params)
+    # xgboost >= 2.0 moved early_stopping_rounds from .fit() to the constructor
+    model = xgb.XGBClassifier(early_stopping_rounds=50, **params)
     model.fit(
         X_train,
         y_train,
         eval_set=[(X_val, y_val)],
-        early_stopping_rounds=50,
         verbose=False,
     )
     logger.info(
