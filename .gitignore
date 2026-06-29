@@ -37,3 +37,4 @@ project_sentinel/outputs/**/*.png
 project_sentinel/outputs/**/*.json
 project_sentinel/outputs/**/*.csv
 !project_sentinel/outputs/**/.gitkeep
+
