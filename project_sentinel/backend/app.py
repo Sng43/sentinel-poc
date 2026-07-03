@@ -19,6 +19,7 @@ import pandas as pd
 import shap
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from src.explain import generate_clinical_alert
 from src.models import load_models
@@ -120,3 +121,12 @@ def predict(patient: dict[str, Any]) -> dict:
         threshold=THRESHOLD,
         conformal_qhat=QHAT,
     )
+
+
+# Serve the built React frontend at "/" so the whole demo is one URL in production
+# (no CORS needed). Mounted last, after the API routes above, so those win; the SPA
+# only catches everything else. ponytail: no SPA router here, so plain static serving
+# is enough — no history-fallback middleware needed.
+_DIST = _ROOT / "frontend" / "dist"
+if _DIST.is_dir():
+    app.mount("/", StaticFiles(directory=str(_DIST), html=True), name="frontend")

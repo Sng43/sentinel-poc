@@ -1,356 +1,324 @@
-# 🏥 Project Sentinel — Sepsis-Associated AKI Early Warning System
+# 🏥 Project Sentinel — Sepsis-Associated AKI Early-Warning System
 
-**Proof-of-Concept ML Pipeline for Prospective Prediction of Acute Kidney Injury in ICU Patients**
+**A working, end-to-end ML product that predicts Acute Kidney Injury in ICU patients *before* it happens — with calibrated risk scores, SHAP explanations, and a ward dashboard.**
 
 > *"What is the probability that this ICU patient will meet KDIGO AKI Stage ≥1 criteria within the next 6, 12, or 24 hours?"*
 
+<!-- Fill these two links in before submitting -->
+### 🔗 Live demo: **_<add your Hugging Face Space URL here>_**
+### 🎬 5-minute walkthrough video: **_<add your video URL here>_**
+
+![Project Sentinel ward dashboard](report_assets/sentinel_dashboard_full.png)
+
 ---
 
-## Table of Contents
+## Contents
 
-- [Overview](#overview)
-- [Clinical Context](#clinical-context)
-- [Architecture](#architecture)
-- [Project Structure](#project-structure)
-- [Getting Started](#getting-started)
-- [Data Acquisition](#data-acquisition)
-- [Pipeline Phases](#pipeline-phases)
-- [Model Design](#model-design)
-- [Evaluation Suite](#evaluation-suite)
-- [Explainability & Clinical Alerts](#explainability--clinical-alerts)
-- [Running the Pipeline](#running-the-pipeline)
-- [Expected Outputs](#expected-outputs)
-- [Known Limitations](#known-limitations)
+- [What it is](#what-it-is)
+- [The product](#the-product)
+- [Quickstart — run it locally](#quickstart--run-it-locally)
+- [Deployment](#deployment)
+- [Testing](#testing)
+- [Results & analysis](#results--analysis)
+- [Discussion — why the milestones matter](#discussion--why-the-milestones-matter)
+- [Recommendations & future work](#recommendations--future-work)
+- [How the models are built (the pipeline)](#how-the-models-are-built-the-pipeline)
+- [Repository layout](#repository-layout)
+- [Known limitations](#known-limitations)
 - [License](#license)
 
 ---
 
-## Overview
+## What it is
 
-Project Sentinel is a proof-of-concept machine learning pipeline for early prediction of **Sepsis-Associated Acute Kidney Injury (SA-AKI)**. Rather than classifying existing AKI (which KDIGO criteria already do — often too late), this system performs **probabilistic, prospective prediction** across multiple time horizons.
+Serum creatinine is a **lagging** indicator — a patient can lose more than half their
+kidney function before the standard KDIGO criteria flag AKI, by which point it is often
+too late to intervene. **Project Sentinel is a proof-of-concept ML system that predicts
+Sepsis-Associated AKI (SA-AKI) prospectively**, so a clinician gets a calibrated,
+explainable warning hours *before* the damage shows up in the labs.
 
-The pipeline demonstrates the full workflow — from raw ICU time-series data to calibrated clinical alerts with per-patient explanations — and is architecturally ready for retraining on real hospital data.
+The intended deployment target is a **resource-limited Rwandan hospital (RMRTH)** running
+the **OpenClinic GA** EHR. Because that hospital's data isn't available yet, the models
+here are trained on the **open-access MIMIC-IV clinical demo** as a surrogate — the
+architecture is built to be retrained on real hospital data with no code changes.
 
-## Clinical Context
+> **This is a proof-of-concept, not a deployable model.** On the 100-patient demo it
+> *will* overfit — and it is stated plainly throughout. The deliverable is a **working
+> end-to-end product**: real relational ICU data → KDIGO labels → features → calibrated
+> risk → SHAP alerts → a live ward dashboard. See [Results & analysis](#results--analysis).
 
-This project targets the clinical reality of **resource-limited hospitals** where:
+## The product
 
-- **34.1%** of adult patients requiring acute hemodialysis die
-- Serum creatinine is a **lagging indicator** — patients lose >50% kidney function before standard diagnostic criteria are met
-- Urine output is tracked in fewer than **4%** of at-risk pediatric cases
-- The target deployment environment is **OpenClinic GA**, a hospital EHR system
+Two pieces, served from **one URL** in production:
 
-The core insight: *KDIGO criteria diagnose AKI after the damage is done. This system predicts it before it happens, enabling earlier intervention.*
-
-## Architecture
-
-```
-┌─────────────────────────────────────────────────────────┐
-│                  Cascaded Two-Stage Design               │
-├─────────────────────────────────────────────────────────┤
-│                                                         │
-│  ┌─────────────────────┐     ┌────────────────────────┐ │
-│  │   Stage 1: Screener │     │  Stage 2: Full Model   │ │
-│  │   (Vitals Only)     │────▶│  (All Features)        │ │
-│  │   LightGBM          │     │  LightGBM + XGBoost    │ │
-│  │   Low latency       │     │  High accuracy         │ │
-│  └─────────────────────┘     └────────────────────────┘ │
-│         │                              │                │
-│         ▼                              ▼                │
-│  ┌─────────────────────────────────────────────────────┐ │
-│  │  Isotonic Calibration → Risk Score → SHAP Alert    │ │
-│  └─────────────────────────────────────────────────────┘ │
-└─────────────────────────────────────────────────────────┘
-```
-
-- **Stage 1** — Vitals-only screener (HR, MAP, O₂Sat, Temp, Resp, SBP + rolling stats). Simulates the scenario where labs are unavailable (common in district hospitals).
-- **Stage 2** — Full-feature predictor (all vitals, labs, creatinine velocity, composite features). Fires only when Stage 1 risk exceeds threshold (`p ≥ 0.25`).
-- Both stages train separate models for **6h, 12h, and 24h** prediction horizons.
-
-## Project Structure
-
-```
-sentinel-poc/
-├── README.md                              ← You are here
-├── project_sentinel/                      ← Core ML pipeline
-│   ├── pyproject.toml                     ← Dependencies (managed by uv)
-│   ├── uv.lock                            ← Lockfile (commit to VCS)
-│   ├── .python-version                    ← Python 3.12
-│   ├── src/
-│   │   ├── __init__.py
-│   │   ├── data_loader.py                 ← Data loading, cohort definition, baseline Cr
-│   │   ├── labels.py                      ← KDIGO AKI criteria & prospective horizon labels
-│   │   ├── features.py                    ← Feature engineering pipeline (rolling, velocity, composites)
-│   │   ├── models.py                      ← LightGBM/XGBoost training, Optuna tuning, calibration
-│   │   ├── evaluation.py                  ← Metrics, ROC/PR curves, DCA, subgroup analysis
-│   │   └── explain.py                     ← SHAP explainability & clinical alert generation
-│   ├── notebooks/
-│   │   ├── 01_data_acquisition.ipynb
-│   │   ├── 02_cohort_definition.ipynb
-│   │   ├── 03_feature_engineering.ipynb
-│   │   ├── 04_label_engineering.ipynb
-│   │   ├── 05_model_training.ipynb
-│   │   ├── 06_evaluation.ipynb
-│   │   └── 07_explainability.ipynb
-│   ├── data/
-│   │   ├── raw/                           ← Downloaded source files (never modified)
-│   │   ├── interim/                       ← Merged + cleaned DataFrames
-│   │   └── processed/                     ← Feature-engineered, split datasets
-│   ├── outputs/
-│   │   ├── figures/                       ← ROC, PR, calibration, DCA, SHAP plots
-│   │   ├── models/                        ← Serialised .pkl model artefacts
-│   │   └── reports/                       ← CSV comparisons, JSON alerts
-│   ├── run_pipeline.py                    ← Master CLI runner (--phase N or --all)
-│   └── main.py                            ← Entry point stub
-└── mimic_demo_project/                    ← MIMIC-IV Demo data downloader
-    └── download_mimic_demo.py             ← Anonymous S3 download script
-```
-
-## Getting Started
-
-### Prerequisites
-
-- **Python 3.12+**
-- **[uv](https://docs.astral.sh/uv/)** — Fast Python package manager
-
-### Installation
-
-```bash
-# Clone the repository
-git clone https://github.com/sengakabare/sentinel-poc.git
-cd sentinel-poc/project_sentinel
-
-# Install all dependencies (creates .venv automatically)
-uv sync
-
-# For development (includes Jupyter)
-uv sync --group dev
-```
-
-### Dependencies
-
-| Package | Purpose |
-|---|---|
-| `pandas`, `numpy`, `scipy` | Data manipulation & scientific computing |
-| `scikit-learn` | Preprocessing, calibration, evaluation metrics |
-| `lightgbm` | Stage 1 & Stage 2 gradient boosting models |
-| `xgboost` | Stage 2 comparison model |
-| `shap` | Model explainability (TreeExplainer) |
-| `optuna` | Bayesian hyperparameter optimisation |
-| `imbalanced-learn` | SMOTE / class imbalance handling |
-| `matplotlib`, `seaborn` | Visualisation |
-| `pyarrow` | Parquet I/O |
-| `tqdm` | Progress bars |
-
-## Data Acquisition
-
-### Primary Dataset: PhysioNet/CinC Challenge 2019
-
-**"Early Prediction of Sepsis from Clinical Data"**
-
-- **Source:** [physionet.org/content/challenge-2019/1.0.0/](https://physionet.org/content/challenge-2019/1.0.0/)
-- **License:** Open Data Commons Attribution License v1.0
-- **Size:** ~40,000 ICU patients across two hospital systems (Set A + Set B)
-- **Format:** One `.psv` file per patient, hourly measurements
-- **Variables:** 8 vitals, 26 labs, 6 demographics, 1 sepsis label
-
-```bash
-cd project_sentinel/data/raw
-
-# Set A (~20,000 patients)
-wget -r -N -c -np https://physionet.org/files/challenge-2019/1.0.0/training/training_setA/
-
-# Set B (~20,000 patients)
-wget -r -N -c -np https://physionet.org/files/challenge-2019/1.0.0/training/training_setB/
-```
-
-### Fallback: MIMIC-IV Demo
-
-If PhysioNet 2019 is inaccessible, a download script for the [MIMIC-IV Clinical Database Demo](https://physionet.org/content/mimiciv-demo/) is provided:
-
-```bash
-cd mimic_demo_project
-uv run download_mimic_demo.py
-```
-
-This downloads the 100-patient demo dataset from AWS Open Data Registry (no credentials required).
-
-## Pipeline Phases
-
-The pipeline is structured as sequential phases, each building on the previous:
-
-| Phase | Module | Description |
+| Layer | Stack | Role |
 |---|---|---|
-| **2** | `data_loader.py` | Load `.psv` files, merge into unified DataFrame, define cohort with inclusion criteria |
-| **3** | `labels.py` | Apply KDIGO AKI criteria, generate prospective 6h/12h/24h horizon labels |
-| **4** | `features.py` | Missingness indicators → rolling stats → imputation → creatinine velocity → composite features |
-| **5** | `models.py` | Train Stage 1 (vitals-only) and Stage 2 (full features) models with Optuna tuning |
-| **6** | `evaluation.py` | AUROC, AUPRC, Brier score, ECE, DCA, subgroup analysis |
-| **7** | `explain.py` | SHAP global importance, patient waterfall plots, clinical alert JSON generation |
+| **Inference backend** | FastAPI + LightGBM + SHAP | Loads the calibrated Stage-2 24h model + a SHAP `TreeExplainer` once at startup, scores a patient-hour, and returns a clinical alert. Endpoints: `GET /health`, `GET /patients`, `GET /sample`, `POST /predict`. |
+| **Ward dashboard** | React + Vite + Tailwind | Shows a demo ward spread across the risk spectrum, lets you score a patient-hour, and renders the risk level, the **top-3 SHAP contributors**, and a recommended action. |
 
-### Labeling Strategy (KDIGO Criteria)
+Every alert carries three safety-relevant features that distinguish this from a black box:
 
-```
-AKI = True if:
-    (creatinine_current − creatinine_baseline) ≥ 0.3 mg/dL
-    OR
-    creatinine_current ≥ 1.5 × creatinine_baseline
-```
+- **Calibrated probability** — isotonic-regression-calibrated, so a "40% risk" means 40%.
+- **SHAP explanation** — the top-3 factors behind *this* score (e.g. *rising creatinine
+  velocity*, *low MAP*, *high lactate*).
+- **Conformal abstention** — borderline scores return **`INDETERMINATE`** ("I don't know")
+  instead of a false-confident number.
 
-Three exclusion rules ensure label quality:
-1. **Prevalent-case exclusion** — patient already has AKI at time `t`
-2. **Insufficient-horizon exclusion** — less than 1 hour before discharge
-3. **Unobservable-outcome exclusion** — no creatinine measurement in the forward window
-
-### Key Engineered Features
-
-| Category | Examples |
+| Scoring panel | A scored alert with its SHAP factors |
 |---|---|
-| **Creatinine velocity** | `delta_Cr`, `creatinine_velocity_12h`, `cr_above_baseline`, `cr_ratio_baseline` |
-| **Rolling statistics** | `{vital/lab}_{mean,std,min,max}_{6h,12h}` for all vitals and key labs |
-| **Composite features** | `renal_perf_pressure`, `map_cr_velocity_interaction`, `wbc_lactate_product`, `bun_cr_ratio` |
-| **Missingness indicators** | `{lab}_observed` — captures informative missingness signal |
-| **Temporal** | `hours_since_sepsis` |
-
-### Data Split Strategy
-
-**Temporal validation** (not random) to prevent data leakage:
-
-| Split | Strategy | Purpose |
-|---|---|---|
-| **Train** | First 70% of patients chronologically | Model training |
-| **Validation** | Next 15% | Early stopping, calibration |
-| **Test** | Last 15% | Final evaluation |
-| **Site holdout** | All Hospital System B patients | Generalisability assessment |
-
-## Model Design
-
-### Stage 1 — Vitals-Only Screener (LightGBM)
-
-Uses 15 features: `HR`, `MAP`, `O2Sat`, `Temp`, `Resp`, `SBP` + rolling stats + `hours_since_sepsis`, `Age`, `Gender`.
-
-### Stage 2 — Full-Feature Predictor (LightGBM + XGBoost)
-
-Uses all engineered features (~200+ columns). Optuna tunes LightGBM on the 24h horizon (50 trials), then reuses the best hyperparameters across all horizons.
-
-### Calibration
-
-All models are post-hoc calibrated with **isotonic regression** — a non-negotiable requirement for clinical deployment. A miscalibrated model that outputs 90% risk when true risk is 40% destroys clinician trust.
-
-## Evaluation Suite
-
-| Metric | Purpose |
-|---|---|
-| **AUROC** | Overall discrimination |
-| **AUPRC** | Better metric for imbalanced classes |
-| **Brier Score** | Probability accuracy |
-| **ECE** | Calibration quality |
-| **Decision Curve Analysis** | Net clinical benefit at different thresholds |
-| **Threshold metrics** | Sensitivity, specificity, PPV, NPV at clinical thresholds (0.20, 0.35, 0.50) |
-| **Subgroup analysis** | Performance by age, ICU type, MAP at sepsis onset, hospital system |
-
-## Explainability & Clinical Alerts
-
-Every risk alert surfaces its **top 3 contributing factors** via SHAP:
-
-```json
-{
-  "patient_id": "p001234",
-  "risk_score": 0.72,
-  "risk_level": "HIGH",
-  "aki_probability_24h": "72%",
-  "top_contributors": [
-    {"feature": "Creatinine velocity (last 12h)", "direction": "RISING", "value": "+0.12 mg/dL/hr"},
-    {"feature": "Mean arterial pressure (6h avg)", "direction": "LOW",    "value": "61 mmHg"},
-    {"feature": "Lactate",                         "direction": "HIGH",   "value": "4.1 mmol/L"}
-  ],
-  "recommended_action": "URGENT: Consider immediate nephrology consultation..."
-}
-```
-
-## Running the Pipeline
-
-### Via CLI (run_pipeline.py)
-
-```bash
-cd project_sentinel
-
-# Run a specific phase
-uv run python run_pipeline.py --phase 2
-
-# Run all phases sequentially
-uv run python run_pipeline.py --all
-```
-
-### Via Notebooks (interactive)
-
-```bash
-cd project_sentinel
-
-# Launch Jupyter
-uv run jupyter notebook
-
-# Or execute non-interactively
-uv run jupyter nbconvert --to notebook --execute notebooks/01_data_acquisition.ipynb
-```
-
-## Expected Outputs
-
-```
-outputs/
-├── models/
-│   ├── stage1_lgbm_{6,12,24}h.pkl
-│   ├── stage2_lgbm_{6,12,24}h.pkl
-│   ├── stage2_xgb_{6,12,24}h.pkl
-│   └── calibrators/
-├── figures/
-│   ├── calibration_curves.png
-│   ├── roc_curves.png
-│   ├── pr_curves.png
-│   ├── decision_curve_analysis.png
-│   ├── shap_summary_bar.png
-│   ├── shap_summary_dot.png
-│   └── shap_patient_{tp,fn,tn}.png
-└── reports/
-    ├── model_comparison.csv
-    ├── subgroup_analysis.csv
-    ├── feature_manifest.csv
-    └── sample_alerts.json
-```
-
-## Known Limitations
-
-These are not failures of this PoC — they are the specification gaps that real hospital data will close:
-
-| # | Limitation | Mitigation Path |
-|---|---|---|
-| 1 | **No urine output labels** — KDIGO urine output criterion (<0.5 mL/kg/hr for ≥6h) is not computable from PhysioNet 2019 data | Real hospital data must include structured urine output tracking |
-| 2 | **No baseline creatinine from prior admissions** — only in-stay creatinine is available | Longitudinal EHR records will provide community baseline |
-| 3 | **No novel biomarkers** — NGAL, KIM-1, TIMP-2·IGFBP7 (NephroCheck) are not in this dataset | If the hospital can run these assays, they should be added as features |
-| 4 | **Western ICU population** — data comes from US hospital systems; SA-AKI etiology at the target hospital is dominated by severe malaria and tropical infections | Model requires fine-tuning or full retraining on local data |
-| 5 | **No medication data** — nephrotoxic drugs (NSAIDs, aminoglycosides, contrast agents) are strong AKI risk factors | Must be populated from EHR pharmacy records |
-| 6 | **No pediatric cohort** — this PoC targets adult ICU patients (Age ≥ 18) | Pediatric SA-AKI requires a separate model and separate data |
-
-## Validation Checklist
-
-Status after the first full local run on the 100-patient MIMIC-IV demo:
-
-- [x] Temporal split confirmed: split is chronological by patient (train/val/test)
-- [x] No feature leakage: test AUROC is 0.66, **not** fake-perfect — a leak would force it near 1.0
-- [x] Calibration curves generated (pre vs post isotonic) — `outputs/figures`
-- [ ] AUROC > 0.75 for the 24h Stage 2 model — **0.66 on the demo; expected to miss at 100 patients.** Target applies to full MIMIC-IV
-- [x] DCA and subgroup reports generated — `outputs/reports` (surfaced a real <65 vs 65+ fairness gap: AUROC 0.74 vs 0.62)
-- [ ] Site holdout (Set B) — **N/A**: demo is single-site, so `site_holdout` is empty by design
-- [x] `sample_alerts.json` is readable and structured for EHR integration
-- [x] All output files exist and are non-empty (except the by-design-empty `site_holdout`)
-
-> The unmet items are **expected** on a 100-patient demo, not failures — the goal here is a
-> working end-to-end pipeline, not a deployable model. They become real targets on full MIMIC-IV.
-
-## License
-
-This project uses publicly available datasets under the [Open Data Commons Attribution License v1.0](https://opendatacommons.org/licenses/by/1.0/).
+| ![scoring panel](report_assets/sentinel_scoring_panel.png) | ![scored alert](report_assets/sentinel_scored_alert.png) |
 
 ---
 
-*Project Sentinel PoC — Full ML pipeline established. Retraining on real hospital data is Phase 2.*
+## Quickstart — run it locally
+
+**Prerequisites:** [uv](https://docs.astral.sh/uv/) (Python 3.12) and Node 20+.
+The trained demo models (~3 MB) and the ward-demo dataset are committed, so **you do not
+need to download or train anything to run the app.** On macOS, LightGBM needs libomp:
+`brew install libomp`.
+
+```bash
+git clone https://github.com/Sng43/sentinel-poc.git
+cd sentinel-poc/project_sentinel
+uv sync                                   # create .venv, install deps
+```
+
+**Terminal 1 — backend (from `project_sentinel/`):**
+
+```bash
+uv run uvicorn backend.app:app --port 8000
+# → http://localhost:8000/health  should return {"status":"ok"}
+```
+
+**Terminal 2 — frontend:**
+
+```bash
+cd frontend
+npm install
+npm run dev
+# → open http://localhost:5173
+```
+
+The frontend talks to the backend via `frontend/.env.development` (`VITE_API_URL=http://localhost:8000`).
+
+> **One-URL alternative (production mode):** `cd frontend && npm run build`, then just run
+> the backend — it serves the built dashboard at `http://localhost:8000/` alongside the API,
+> exactly as the deployed Space does.
+
+---
+
+## Deployment
+
+Deployed as a **single Hugging Face Docker Space**: a two-stage `Dockerfile`
+([`project_sentinel/Dockerfile`](project_sentinel/Dockerfile)) builds the React frontend,
+then a Python image serves the built dashboard *and* the FastAPI API from one container on
+port 7860 — no CORS, one URL.
+
+**Deploy it yourself (one command):**
+
+```bash
+# 1. Create a Space at https://huggingface.co/new-space  (SDK: Docker, blank)
+# 2. Grab a write token: https://huggingface.co/settings/tokens
+# 3. Push:
+deploy/push_to_hf.sh https://huggingface.co/spaces/<your-user>/<space-name>
+```
+
+The script ([`deploy/push_to_hf.sh`](deploy/push_to_hf.sh)) copies exactly what the image
+needs — including the git-ignored `test.parquet` and the HF Space README
+([`deploy/hf-space-README.md`](deploy/hf-space-README.md)) — commits, and pushes. Hugging
+Face then builds the Dockerfile automatically. Verify by opening the Space URL: the
+dashboard loads and `…/health` returns `{"status":"ok"}`.
+
+**Build & run the exact image locally** (same environment as the Space):
+
+```bash
+cd project_sentinel
+docker build -t sentinel-demo .
+docker run -p 7860:7860 sentinel-demo      # → http://localhost:7860
+```
+
+---
+
+## Testing
+
+Full detail, results, and screenshots: **[TESTING.md](TESTING.md)**. In short — three
+strategies, **17 automated tests passing**, plus a cross-environment latency benchmark:
+
+```bash
+cd project_sentinel
+uv sync --group dev
+uv run pytest -q                 # 17 passed
+uv run python bench_latency.py   # p50/p95 latency of /predict
+```
+
+| Strategy | Covers | Result |
+|---|---|---|
+| **Clinical-logic unit tests** | KDIGO creatinine/urine criteria (incl. "0 mL/kg/h = anuria, not missing"), risk thresholds, conformal band | 7/7 ✅ |
+| **API integration tests** | every endpoint end-to-end + edge cases: all-missing patient, malformed → 422, extreme values, carried patient id | 10/10 ✅ |
+| **Performance benchmark** | `/predict` latency, compute-only vs. over-HTTP (and cloud, post-deploy) | p50 **~4.3 ms** per alert |
+
+Edge cases exercised with **different data values** — valid, empty (brand-new admission,
+all NaN), malformed, clinically extreme, and abstention-band inputs — are tabulated in
+[TESTING.md §3](TESTING.md#3-different-data-values--edge-cases).
+
+---
+
+## Results & analysis
+
+Headline metrics — **Stage-2 LightGBM @ 24 h, held-out test split** (100-patient MIMIC-IV
+demo, 1,965 patient-hours):
+
+| Metric | Value | Reading |
+|---|---|---|
+| **AUROC** | **0.66** | Modest — and, crucially, **not fake-perfect**. A target leak would force it toward 1.0. |
+| **AUPRC** | **0.50** | Well above the ~26% positive base rate at 24 h. |
+| **Brier** | 0.20 | — |
+| **ECE (calibration error)** | **0.11** | Probabilities are usable, not wildly over/under-confident. |
+| Specificity / PPV (@0.5) | 0.90 / 0.59 | Few false alarms; a fired alert is right ~59% of the time. |
+
+**Did it meet the proposal objectives?**
+
+| Objective (from the proposal) | Outcome |
+|---|---|
+| A **working end-to-end** SA-AKI pipeline on real relational ICU data | ✅ **Achieved** — load → KDIGO labels (creatinine **and** urine) → features → train → eval → explain → serve, all run end-to-end. |
+| **Calibrated, honest** risk (not a leaky 0.99-AUROC illusion) | ✅ **Achieved** — isotonic calibration; ECE 0.11; AUROC 0.66 is the *proof* there's no leakage. |
+| **Explainable, safe** alerts | ✅ **Achieved** — SHAP top-3 per alert + conformal `INDETERMINATE` abstention. |
+| A **usable, deployed** product | ✅ **Achieved** — FastAPI + React dashboard, one-URL Docker deploy, ~4 ms/alert. |
+| **Discrimination target AUROC > 0.75** | ⚠️ **Missed by design** — 0.66 on 100 patients. This target applies to full MIMIC-IV; see [dataset sizing](#known-limitations). |
+| **Fairness across subgroups** | ⚠️ **Gap surfaced, honestly reported** — AUROC **0.74 (<65)** vs **0.62 (65+)**, with worse calibration on the elderly (ECE 0.06 vs 0.19). |
+
+The missed items are **expected consequences of a 100-patient demo, not implementation
+failures** — the point of this PoC is that the *pipeline and product* work, not that this
+particular model is deployable. The subgroup gap is exactly the kind of finding the
+evaluation suite exists to catch before anything reaches a bedside.
+
+## Discussion — why the milestones matter
+
+- **The pipeline milestone is the hard, reusable asset.** Turning messy, multi-table ICU
+  records into leakage-free KDIGO labels — using *both* the creatinine and the mask-aware
+  urine-output criteria, labelling from raw measurements *before* the chronological split —
+  is where clinical ML usually goes silently wrong. Getting that right is what makes
+  retraining on RMRTH data a data problem, not a rebuild.
+- **Calibration + abstention is what makes it safe to show a clinician.** An early-warning
+  score that is confidently wrong destroys trust faster than no score at all. Isotonic
+  calibration (ECE 0.11) plus a conformal "I don't know" band is the difference between a
+  research artefact and something a ward could reason about.
+- **The deployment milestone proves the whole path.** A calibrated model in a notebook
+  helps no one. Scoring a patient-hour into an explained alert in ~4 ms, served from one
+  URL, is the evidence that the path from data to bedside actually closes.
+
+**Impact:** the product is architecturally ready to be retrained on the target hospital's
+OpenClinic GA data. The evaluation and fairness tooling means that when it is, the same
+run will immediately surface whether it is trustworthy for *that* population.
+
+## Recommendations & future work
+
+**For the community / anyone applying this:**
+
+- **Do not deploy this demo model clinically.** It overfits 100 patients. The transferable
+  value is (a) the end-to-end pipeline and (b) the *design pattern* — calibrated
+  probabilities + SHAP + conformal abstention — for a trustworthy clinical EWS.
+- **Re-validate on your own population.** The elderly-subgroup gap shows performance is
+  population-specific; SA-AKI aetiology at RMRTH (severe malaria, tropical infection)
+  differs from a US ICU, so local retraining is mandatory, not optional.
+
+**Future work (roadmap):**
+
+1. Train on **full MIMIC-IV** (~70–90k stays; PhysioNet DUA application in progress) to
+   clear the sizing floor, then externally validate on **eICU-CRD / AmsterdamUMCdb**.
+2. Add the **SOFA ≥ 2** component to the sepsis-onset definition (currently
+   suspicion-of-infection only).
+3. Wire a **live OpenClinic GA feed** in place of the in-memory demo set.
+4. Add **nephrotoxic-drug** and **novel-biomarker** (NGAL, TIMP-2·IGFBP7) features once the
+   hospital can supply them.
+
+---
+
+## How the models are built (the pipeline)
+
+The models the app serves are produced by a 7-notebook pipeline (`project_sentinel/notebooks/`,
+run 01→07) that mirrors the `src/` modules. You only need this to **retrain** — the app runs
+off the committed artefacts.
+
+```
+Stage 1 (screener)          Stage 2 (confirmer)
+vitals only, LightGBM   ──▶ all 198 features, LightGBM + XGBoost (Optuna-tuned)
+low latency, high recall    high precision, reduces alarm fatigue
+        │                           │
+        └───────────────┬───────────┘
+                        ▼
+          Isotonic calibration → risk score → SHAP alert → conformal abstention
+```
+
+Separate models per horizon (**6 h, 12 h, 24 h**). Stage 1 simulates the labs-unavailable
+scenario common in district hospitals.
+
+| NB | Does | Writes |
+|---|---|---|
+| 01 | download → load tables → hourly reshape → sepsis onset | `interim/hourly_cohort.parquet` |
+| 02 | inclusion criteria → baseline creatinine → prevalent-AKI exclusion | `interim/cohort_defined.parquet` |
+| 03 | missingness → rolling → impute → velocity → composites | `interim/engineered_features.parquet` |
+| 04 | KDIGO labels (creatinine + urine) → **then** chronological split | `processed/{train,val,test}.parquet` |
+| 05 | Stage-1 + Stage-2 (Optuna) → isotonic calibration | `models/…` |
+| 06 | AUROC/AUPRC/ECE, ROC/PR/calibration/DCA, subgroups | `outputs/figures`, `outputs/reports` |
+| 07 | SHAP summaries, waterfalls, clinical-alert JSON | `outputs/explain_*` |
+
+To reproduce from scratch, first fetch the open-access demo data (no credentialing):
+
+```bash
+cd project_sentinel
+uv run python ../mimic_demo_project/download_mimic_demo.py data/raw/mimic_iv_demo
+uv run jupyter lab          # run notebooks 01 → 07 in order
+```
+
+**KDIGO Stage-1 AKI** is flagged if **either** channel is met:
+- **Creatinine:** rise ≥ 0.3 mg/dL above baseline, **OR** ≥ 1.5× baseline.
+- **Urine output:** < 0.5 mL/kg/h sustained for ≥ 6 h (mask-aware; unobserved hours never
+  counted as anuria).
+
+## Repository layout
+
+```
+sentinel-poc/
+├── README.md                     ← this file
+├── TESTING.md                    ← testing strategies, results, screenshots
+├── report_assets/                ← dashboard screenshots + eval figures
+├── deploy/                       ← Hugging Face Space README + one-command push script
+├── mimic_demo_project/
+│   └── download_mimic_demo.py    ← open-access MIMIC-IV demo downloader (stdlib only)
+└── project_sentinel/             ← run commands from here
+    ├── Dockerfile                ← two-stage build: React frontend + FastAPI, one image
+    ├── pyproject.toml            ← deps (uv, Python 3.12)
+    ├── src/                      ← data_loader · labels · features · models · evaluation · explain · conformal
+    ├── notebooks/                ← 01→07 pipeline
+    ├── backend/app.py            ← FastAPI inference API (serves the built SPA in prod)
+    ├── frontend/                 ← React + Vite + Tailwind ward dashboard
+    ├── tests/                    ← pytest suite (unit + API integration)
+    ├── bench_latency.py          ← /predict latency benchmark
+    ├── models/                   ← committed demo models (~3 MB) + calibrators + metadata
+    └── data/processed/test.parquet  ← committed ward-demo set (required by the app)
+```
+
+## Known limitations
+
+These are specification gaps that real hospital data closes — not failures of the PoC:
+
+| # | Limitation | Mitigation path |
+|---|---|---|
+| 1 | **100-patient demo → overfits**; AUROC 0.66, not > 0.75 | Full MIMIC-IV (~70–90k stays) clears the sizing floor. |
+| 2 | **Baseline creatinine** = in-stay pre-sepsis minimum | Full data uses 7–365-day pre-admission outpatient creatinine. |
+| 3 | **Sepsis onset** = suspicion-of-infection only | Add the SOFA ≥ 2 component. |
+| 4 | **Western ICU population**; elderly-subgroup gap | Retrain on local (RMRTH) data; SA-AKI aetiology differs. |
+| 5 | **No medication / novel-biomarker features** | Populate from EHR pharmacy + assay records. |
+| 6 | **In-memory demo feed**, not a live EHR | Wire an OpenClinic GA adapter. |
+
+**Dataset sizing:** the demo trains on ~96 unique patients — far below the ~1–2k *floor*
+where results stop being noise, and the ~10–20k *favorable* tier where subgroup splits hold
+up. This is *why* it overfits; it is documented, not hidden.
+
+## License
+
+Uses publicly available datasets under the
+[Open Data Commons Attribution License v1.0](https://opendatacommons.org/licenses/by/1.0/).
+The MIMIC-IV clinical demo is open-access (PhysioNet). Full MIMIC-IV is credentialed and is
+**never** committed to this repository.

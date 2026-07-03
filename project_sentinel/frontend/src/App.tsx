@@ -6,7 +6,9 @@ import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
 
-const API = "http://localhost:8000"
+// Same-origin in production (the backend serves this built SPA). Local dev points
+// at the :8000 backend via frontend/.env.development. ponytail: env over hardcode.
+const API = import.meta.env.VITE_API_URL ?? ""
 
 type RiskLevel = "HIGH" | "MEDIUM" | "LOW" | "INDETERMINATE"
 

@@ -20,6 +20,9 @@ project_sentinel/data/processed/*
 !project_sentinel/data/raw/.gitkeep
 !project_sentinel/data/interim/.gitkeep
 !project_sentinel/data/processed/.gitkeep
+# The ward-demo test set is derived from the open-access MIMIC-IV demo (redistributable)
+# and is required for the backend/app to run from a fresh clone, so it IS tracked.
+!project_sentinel/data/processed/test.parquet
 
 # Loose MIMIC demo download outside the data/ tree (downloader default)
 mimic_iv_demo/
@@ -37,4 +40,3 @@ project_sentinel/outputs/**/*.png
 project_sentinel/outputs/**/*.json
 project_sentinel/outputs/**/*.csv
 !project_sentinel/outputs/**/.gitkeep
-

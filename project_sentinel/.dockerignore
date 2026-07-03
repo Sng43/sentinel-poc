@@ -1,0 +1,19 @@
+# Keep the build context (and image) lean. The Dockerfile pulls in exactly what it
+# needs; everything below is dev-only, huge, or rebuilt inside the image.
+.venv/
+**/node_modules/
+**/__pycache__/
+**/.ipynb_checkpoints/
+frontend/dist/
+notebooks/
+outputs/
+run_pipeline.py
+main.py
+data/raw/
+data/interim/
+# processed/: only test.parquet is needed at runtime (the ward demo set)
+data/processed/*
+!data/processed/test.parquet
+.git/
+.gitignore
+*.md
