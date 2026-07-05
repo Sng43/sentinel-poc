@@ -108,27 +108,32 @@ The frontend talks to the backend via `frontend/.env.development` (`VITE_API_URL
 
 ## Deployment
 
-Deployed as a **single Hugging Face Docker Space**: a two-stage `Dockerfile`
-([`project_sentinel/Dockerfile`](project_sentinel/Dockerfile)) builds the React frontend,
-then a Python image serves the built dashboard *and* the FastAPI API from one container on
-port 7860 — no CORS, one URL.
+**Live deployment: https://huggingface.co/spaces/Sng43/sentinel-poc**
+(direct app URL: https://sng43-sentinel-poc.hf.space)
 
-**Deploy it yourself (one command):**
+**Strategy — one container, one URL.** A two-stage
+[`Dockerfile`](project_sentinel/Dockerfile): stage 1 (`node:22-slim`) builds the React
+dashboard to static assets; stage 2 (`python:3.12-slim`) installs the locked dependencies
+with `uv sync --frozen` (bit-for-bit reproducible from `uv.lock`) and serves the built
+dashboard **and** the FastAPI inference API from a single uvicorn process on port 7860 —
+no CORS, no separate frontend host.
+
+**Execution.** The deploy is fully scripted — [`deploy/push_to_hf.sh`](deploy/push_to_hf.sh)
+stages exactly what the image needs (source, trained models, the git-ignored
+`test.parquet`, and the Space config [`deploy/hf-space-README.md`](deploy/hf-space-README.md))
+and pushes it to a Hugging Face **Docker Space**, which builds the image and swaps it in
+automatically. Re-deploying after any change is one command:
 
 ```bash
-# 1. Create a Space at https://huggingface.co/new-space  (SDK: Docker, blank)
-# 2. Grab a write token: https://huggingface.co/settings/tokens
-# 3. Push:
-deploy/push_to_hf.sh https://huggingface.co/spaces/<your-user>/<space-name>
+deploy/push_to_hf.sh https://huggingface.co/spaces/Sng43/sentinel-poc
 ```
 
-The script ([`deploy/push_to_hf.sh`](deploy/push_to_hf.sh)) copies exactly what the image
-needs — including the git-ignored `test.parquet` and the HF Space README
-([`deploy/hf-space-README.md`](deploy/hf-space-README.md)) — commits, and pushes. Hugging
-Face then builds the Dockerfile automatically. Verify by opening the Space URL: the
-dashboard loads and `…/health` returns `{"status":"ok"}`.
+**Verification in the target environment.** After deploy:
+[`/health`](https://sng43-sentinel-poc.hf.space/health) returns `{"status":"ok"}`, the ward
+dashboard loads at the root URL, and `POST /predict` returns a complete SHAP-explained
+clinical alert — the same behaviour the API integration tests assert locally.
 
-**Build & run the exact image locally** (same environment as the Space):
+**Same image, any other environment** — the identical container runs anywhere Docker does:
 
 ```bash
 cd project_sentinel
