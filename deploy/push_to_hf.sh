@@ -25,7 +25,7 @@ git clone "$SPACE_URL" "$STAGE/space"
 cd "$STAGE/space"
 
 echo "→ copying curated app files…"
-cp "$PS/Dockerfile" "$PS/.dockerignore" "$PS/pyproject.toml" "$PS/uv.lock" .
+cp "$PS/Dockerfile" "$PS/.dockerignore" "$PS/pyproject.toml" "$PS/uv.lock" "$PS/bench_latency.py" .
 cp "$DEPLOY_DIR/hf-space-README.md" README.md
 rm -rf src backend models frontend data
 cp -R "$PS/src" "$PS/backend" "$PS/models" .
