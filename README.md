@@ -4,7 +4,7 @@
 
 > *"What is the probability that this ICU patient will meet KDIGO AKI Stage ≥1 criteria within the next 6, 12, or 24 hours?"*
 
-### 🔗 Live demo: **https://huggingface.co/spaces/Sng43/sentinel-poc**
+### 🔗 Live demo: **https://sng43-sentinel-poc.hf.space/**
 ### 🎬 5-minute walkthrough video: **_<add your video URL here>_**
 
 ![Project Sentinel ward dashboard](report_assets/sentinel_dashboard_full.png)
