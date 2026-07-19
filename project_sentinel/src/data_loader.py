@@ -136,6 +136,12 @@ _ANTIBIOTIC_KEYWORDS: tuple[str, ...] = (
     "aztreonam", "clindamycin", "tobramycin", "doxycycline", "cefazolin",
 )
 
+# chartevents/labevents are streamed in chunks of this many rows rather than
+# loaded whole. Full MIMIC-IV chartevents is ~330M rows and labevents is
+# ~150M+ rows — a single pd.read_csv risks OOM on a standard ~13 GB Colab
+# runtime. The demo (12k rows) runs through the same code path in one chunk.
+_CHUNK_ROWS = 5_000_000
+
 
 # ---------------------------------------------------------------------------
 # Low-level table loading
@@ -180,9 +186,10 @@ def load_mimic_demo(data_dir: str) -> dict[str, pd.DataFrame]:
     Returns
     -------
     dict[str, pd.DataFrame]
-        Keys: ``patients``, ``icustays``, ``chartevents``, ``labevents``,
-        ``outputevents`` (required); ``prescriptions``, ``microbiologyevents``
-        (optional, used for the sepsis proxy).
+        Keys: ``patients``, ``icustays``, ``outputevents`` (required);
+        ``prescriptions``, ``microbiologyevents`` (optional, used for the
+        sepsis proxy). ``chartevents``/``labevents`` are deliberately absent —
+        they are streamed from disk by :func:`build_hourly_cohort` instead.
     """
     tables = {
         "patients": _read_table(
@@ -194,16 +201,9 @@ def load_mimic_demo(data_dir: str) -> dict[str, pd.DataFrame]:
             usecols=["subject_id", "hadm_id", "stay_id", "intime", "outtime", "los"],
             parse_dates=["intime", "outtime"],
         ),
-        "chartevents": _read_table(
-            data_dir, "chartevents",
-            usecols=["stay_id", "charttime", "itemid", "valuenum"],
-            parse_dates=["charttime"],
-        ),
-        "labevents": _read_table(
-            data_dir, "labevents",
-            usecols=["subject_id", "hadm_id", "charttime", "itemid", "valuenum"],
-            parse_dates=["charttime"],
-        ),
+        # chartevents and labevents are NOT eagerly loaded here — at full
+        # MIMIC-IV scale they risk OOM. build_hourly_cohort() streams them
+        # directly from disk in chunks (see _stream_chartevents / _pivot_labs).
         "outputevents": _read_table(
             data_dir, "outputevents",
             usecols=["stay_id", "charttime", "itemid", "value"],
@@ -232,61 +232,104 @@ def _hour_offset(charttime: pd.Series, intime: pd.Series) -> pd.Series:
     return ((charttime - intime).dt.total_seconds() // 3600).astype("Int64")
 
 
-def _stay_weights(chartevents: pd.DataFrame) -> pd.DataFrame:
-    """Best single weight (kg) per stay, for urine-output scaling."""
-    if chartevents.empty:
-        return pd.DataFrame(columns=["stay_id", "weight_kg"])
+def _stream_chartevents(
+    data_dir: str, stay_intime: pd.DataFrame
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Single chunked pass over ``chartevents.csv.gz`` producing both:
 
-    kg = chartevents[chartevents["itemid"].isin(_WEIGHT_KG_ITEMIDS)][["stay_id", "valuenum"]]
-    lb = chartevents[chartevents["itemid"] == _WEIGHT_LB_ITEMID][["stay_id", "valuenum"]].copy()
-    lb["valuenum"] = lb["valuenum"] * 0.453592
-    weights = pd.concat([kg, lb], ignore_index=True)
-    weights = weights[(weights["valuenum"] > 20) & (weights["valuenum"] < 400)]  # plausibility
-    if weights.empty:
-        return pd.DataFrame(columns=["stay_id", "weight_kg"])
-    out = weights.groupby("stay_id")["valuenum"].median().reset_index()
-    return out.rename(columns={"valuenum": "weight_kg"})
+    * hourly vitals — wide frame keyed ``(stay_id, ICULOS)``
+    * per-stay weight (kg) — used to scale urine output
 
-
-def _pivot_vitals(chartevents: pd.DataFrame, stay_intime: pd.DataFrame) -> pd.DataFrame:
-    """Hourly mean of each vital per stay → wide frame keyed (stay_id, ICULOS)."""
-    if chartevents.empty:
-        return pd.DataFrame(columns=["stay_id", "ICULOS"])
+    Combined into one function so the (potentially ~330M-row) file is only
+    streamed once. Reads in ``_CHUNK_ROWS``-row chunks, accumulating partial
+    sum/count per group, so memory stays bounded regardless of dataset size —
+    the demo (12k rows) and full MIMIC-IV both go through this same path.
+    """
+    path = _find_table(data_dir, "chartevents")
+    if path is None:
+        logger.warning("chartevents table not found under %s.", data_dir)
+        return (
+            pd.DataFrame(columns=["stay_id", "ICULOS"]),
+            pd.DataFrame(columns=["stay_id", "weight_kg"]),
+        )
 
     item_to_name: dict[int, str] = {}
     for name, ids in _VITAL_ITEMIDS.items():
         for i in ids:
             item_to_name[i] = name
+    weight_items = set(_WEIGHT_KG_ITEMIDS) | {_WEIGHT_LB_ITEMID}
+    relevant_items = set(item_to_name) | weight_items
 
-    ce = chartevents[chartevents["itemid"].isin(item_to_name)].copy()
-    ce = ce.merge(stay_intime, on="stay_id", how="inner")
-    ce["ICULOS"] = _hour_offset(ce["charttime"], ce["intime"])
-    ce = ce[ce["ICULOS"] >= 0]
-    ce["var"] = ce["itemid"].map(item_to_name)
+    vital_partials: list[pd.DataFrame] = []
+    weight_rows: list[pd.DataFrame] = []
 
-    # Convert Fahrenheit → Celsius then collapse the two temp channels.
-    f_mask = ce["var"] == "Temp_F"
-    ce.loc[f_mask, "valuenum"] = (ce.loc[f_mask, "valuenum"] - 32.0) * 5.0 / 9.0
-    ce.loc[ce["var"].isin(["Temp_C", "Temp_F"]), "var"] = "Temp"
-
-    wide = (
-        ce.groupby(["stay_id", "ICULOS", "var"])["valuenum"].mean()
-        .unstack("var")
-        .reset_index()
+    reader = pd.read_csv(
+        path,
+        usecols=["stay_id", "charttime", "itemid", "valuenum"],
+        parse_dates=["charttime"],
+        chunksize=_CHUNK_ROWS,
+        low_memory=False,
     )
-    return wide
+    for chunk in reader:
+        relevant = chunk[chunk["itemid"].isin(relevant_items)]
+        if relevant.empty:
+            continue
+
+        # --- weights (kg, converting lb→kg; plausibility filter) -----------
+        w = relevant[relevant["itemid"].isin(weight_items)][["stay_id", "itemid", "valuenum"]].copy()
+        if not w.empty:
+            lb_mask = w["itemid"] == _WEIGHT_LB_ITEMID
+            w.loc[lb_mask, "valuenum"] = w.loc[lb_mask, "valuenum"] * 0.453592
+            w = w[(w["valuenum"] > 20) & (w["valuenum"] < 400)]
+            if not w.empty:
+                weight_rows.append(w[["stay_id", "valuenum"]])
+
+        # --- vitals ----------------------------------------------------------
+        ce = relevant[relevant["itemid"].isin(item_to_name)].merge(
+            stay_intime, on="stay_id", how="inner"
+        )
+        if ce.empty:
+            continue
+        ce = ce.assign(ICULOS=_hour_offset(ce["charttime"], ce["intime"]))
+        ce = ce[ce["ICULOS"] >= 0].copy()
+        ce["var"] = ce["itemid"].map(item_to_name)
+
+        # Convert Fahrenheit → Celsius then collapse the two temp channels.
+        f_mask = ce["var"] == "Temp_F"
+        ce.loc[f_mask, "valuenum"] = (ce.loc[f_mask, "valuenum"] - 32.0) * 5.0 / 9.0
+        ce.loc[ce["var"].isin(["Temp_C", "Temp_F"]), "var"] = "Temp"
+
+        vital_partials.append(
+            ce.groupby(["stay_id", "ICULOS", "var"])["valuenum"].agg(["sum", "count"])
+        )
+
+    if vital_partials:
+        totals = pd.concat(vital_partials).groupby(level=[0, 1, 2]).sum()
+        vitals = (totals["sum"] / totals["count"]).unstack("var").reset_index()
+    else:
+        vitals = pd.DataFrame(columns=["stay_id", "ICULOS"])
+
+    if weight_rows:
+        all_weights = pd.concat(weight_rows, ignore_index=True)
+        weights = all_weights.groupby("stay_id")["valuenum"].median().reset_index()
+        weights = weights.rename(columns={"valuenum": "weight_kg"})
+    else:
+        weights = pd.DataFrame(columns=["stay_id", "weight_kg"])
+
+    return vitals, weights
 
 
-def _pivot_labs(
-    labevents: pd.DataFrame,
-    stay_keys: pd.DataFrame,
-) -> pd.DataFrame:
+def _pivot_labs(data_dir: str, stay_keys: pd.DataFrame) -> pd.DataFrame:
     """Hourly mean of each lab per stay → wide frame keyed (stay_id, ICULOS).
 
     Labs are charted at the hadm level, so we map them onto ICU stays via
-    (subject_id, hadm_id) and the stay's admission time.
+    (subject_id, hadm_id) and the stay's admission time. Streams
+    ``labevents.csv.gz`` in ``_CHUNK_ROWS``-row chunks — full MIMIC-IV
+    labevents is well over 100M rows, so a single-shot read risks OOM.
     """
-    if labevents.empty:
+    path = _find_table(data_dir, "labevents")
+    if path is None:
+        logger.warning("labevents table not found under %s.", data_dir)
         return pd.DataFrame(columns=["stay_id", "ICULOS"])
 
     item_to_name: dict[int, str] = {}
@@ -294,17 +337,34 @@ def _pivot_labs(
         for i in ids:
             item_to_name[i] = name
 
-    le = labevents[labevents["itemid"].isin(item_to_name)].copy()
-    le = le.merge(stay_keys, on=["subject_id", "hadm_id"], how="inner")
-    le["ICULOS"] = _hour_offset(le["charttime"], le["intime"])
-    le = le[le["ICULOS"] >= 0]
-    le["var"] = le["itemid"].map(item_to_name)
-
-    wide = (
-        le.groupby(["stay_id", "ICULOS", "var"])["valuenum"].mean()
-        .unstack("var")
-        .reset_index()
+    partials: list[pd.DataFrame] = []
+    reader = pd.read_csv(
+        path,
+        usecols=["subject_id", "hadm_id", "charttime", "itemid", "valuenum"],
+        parse_dates=["charttime"],
+        chunksize=_CHUNK_ROWS,
+        low_memory=False,
     )
+    for chunk in reader:
+        le = chunk[chunk["itemid"].isin(item_to_name)]
+        if le.empty:
+            continue
+        le = le.merge(stay_keys, on=["subject_id", "hadm_id"], how="inner")
+        if le.empty:
+            continue
+        le = le.assign(ICULOS=_hour_offset(le["charttime"], le["intime"]))
+        le = le[le["ICULOS"] >= 0].copy()
+        le["var"] = le["itemid"].map(item_to_name)
+
+        partials.append(
+            le.groupby(["stay_id", "ICULOS", "var"])["valuenum"].agg(["sum", "count"])
+        )
+
+    if not partials:
+        return pd.DataFrame(columns=["stay_id", "ICULOS"])
+
+    totals = pd.concat(partials).groupby(level=[0, 1, 2]).sum()
+    wide = (totals["sum"] / totals["count"]).unstack("var").reset_index()
     return wide
 
 
@@ -350,11 +410,20 @@ def _hourly_urine(
 # ---------------------------------------------------------------------------
 # Top-level builder
 # ---------------------------------------------------------------------------
-def build_hourly_cohort(tables: dict[str, pd.DataFrame]) -> pd.DataFrame:
+def build_hourly_cohort(tables: dict[str, pd.DataFrame], data_dir: str) -> pd.DataFrame:
     """Assemble the canonical hourly time-series frame from raw MIMIC tables.
 
     One row per (ICU stay, hour-since-admission), spanning hour 0 through the
     stay's length-of-stay. See the module docstring for the exact schema.
+
+    Parameters
+    ----------
+    tables : dict
+        Output of :func:`load_mimic_demo` (small tables, already in memory).
+    data_dir : str
+        Same directory passed to :func:`load_mimic_demo`. chartevents and
+        labevents are streamed from here directly (see :func:`_stream_chartevents`
+        / :func:`_pivot_labs`) rather than held fully in memory.
     """
     icustays = tables["icustays"].copy()
     patients = tables["patients"].copy()
@@ -374,10 +443,9 @@ def build_hourly_cohort(tables: dict[str, pd.DataFrame]) -> pd.DataFrame:
     ]
     grid = pd.concat(grid_parts, ignore_index=True)
 
-    # --- Reshape each source stream -----------------------------------------
-    weights = _stay_weights(tables["chartevents"])
-    vitals = _pivot_vitals(tables["chartevents"], stay_intime)
-    labs = _pivot_labs(tables["labevents"], stay_keys)
+    # --- Reshape each source stream (chartevents/labevents streamed from disk) -
+    vitals, weights = _stream_chartevents(data_dir, stay_intime)
+    labs = _pivot_labs(data_dir, stay_keys)
     urine = _hourly_urine(tables["outputevents"], stay_intime, weights)
 
     # --- Merge everything onto the grid -------------------------------------
