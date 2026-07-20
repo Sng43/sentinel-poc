@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="1320" viewBox="0 0 1500 1320" font-family="'Helvetica Neue', Arial, sans-serif">
+  <defs>
+    <marker id="arrow" markerWidth="16" markerHeight="16" refX="8" refY="12" orient="auto">
+      <path d="M2,2 L14,2 L8,14 Z" fill="#4a5568"/>
+    </marker>
+  </defs>
+  <rect width="1500" height="1320" fill="#ffffff"/>
+  <text x="750" y="58" text-anchor="middle" font-size="34" font-weight="700" fill="#1b3a5b">End-to-end data &amp; machine-learning pipeline</text>
+
+  <!-- Box 1 -->
+  <rect x="200" y="100" width="1100" height="130" rx="14" fill="#1b3a5b"/>
+  <text x="250" y="165" font-size="27" font-weight="700" fill="#ffffff">1 · Load &amp; reshape</text>
+  <text x="250" y="200" font-size="19" fill="#c7d6e6">Raw MIMIC-IV tables  →  one row per (ICU stay, hour)  →  sepsis-onset detection</text>
+  <path d="M750,232 L750,268" stroke="#4a5568" stroke-width="3" marker-end="url(#arrow)"/>
+
+  <!-- Box 2 -->
+  <rect x="200" y="270" width="1100" height="130" rx="14" fill="#2e6db4"/>
+  <text x="250" y="335" font-size="27" font-weight="700" fill="#ffffff">2 · Cohort definition</text>
+  <text x="250" y="370" font-size="19" fill="#dbe7f5">Inclusion criteria  →  baseline creatinine  →  prevalent-AKI exclusion</text>
+  <path d="M750,402 L750,438" stroke="#4a5568" stroke-width="3" marker-end="url(#arrow)"/>
+
+  <!-- Box 3 -->
+  <rect x="200" y="440" width="1100" height="130" rx="14" fill="#1b3a5b"/>
+  <text x="250" y="505" font-size="27" font-weight="700" fill="#ffffff">3 · Feature engineering</text>
+  <text x="250" y="540" font-size="19" fill="#c7d6e6">Missingness masks  →  rolling aggregates  →  imputation  →  creatinine velocity &amp; renal composites</text>
+  <path d="M750,572 L750,608" stroke="#4a5568" stroke-width="3" marker-end="url(#arrow)"/>
+
+  <!-- Box 4 (highlight) -->
+  <rect x="200" y="610" width="1100" height="130" rx="14" fill="#26a58a"/>
+  <text x="250" y="670" font-size="27" font-weight="700" fill="#ffffff">4 · KDIGO labelling  →  chronological split</text>
+  <text x="250" y="704" font-size="19" fill="#eafaf5">Stage-1 AKI from creatinine AND mask-aware urine — labelled from RAW measurements, BEFORE the split (no leakage)</text>
+  <path d="M750,742 L750,778" stroke="#4a5568" stroke-width="3" marker-end="url(#arrow)"/>
+
+  <!-- Box 5 -->
+  <rect x="200" y="780" width="1100" height="130" rx="14" fill="#2e6db4"/>
+  <text x="250" y="845" font-size="27" font-weight="700" fill="#ffffff">5 · Model training</text>
+  <text x="250" y="880" font-size="19" fill="#dbe7f5">Stage-1 vitals screener + Stage-2 confirmer (Optuna-tuned)  →  isotonic calibration</text>
+  <path d="M750,912 L750,948" stroke="#4a5568" stroke-width="3" marker-end="url(#arrow)"/>
+
+  <!-- Box 6 -->
+  <rect x="200" y="950" width="1100" height="130" rx="14" fill="#1b3a5b"/>
+  <text x="250" y="1015" font-size="27" font-weight="700" fill="#ffffff">6 · Evaluation</text>
+  <text x="250" y="1050" font-size="19" fill="#c7d6e6">AUROC · AUPRC · Brier · ECE · ROC / PR / calibration / decision curves · subgroup analysis</text>
+  <path d="M750,1082 L750,1118" stroke="#4a5568" stroke-width="3" marker-end="url(#arrow)"/>
+
+  <!-- Box 7 -->
+  <rect x="200" y="1120" width="1100" height="130" rx="14" fill="#e0a233"/>
+  <text x="250" y="1185" font-size="27" font-weight="700" fill="#3a2c07">7 · Explain &amp; serve</text>
+  <text x="250" y="1220" font-size="19" fill="#4a3a10">SHAP top-3 + conformal abstention  →  clinical-alert JSON  →  FastAPI backend + React dashboard</text>
+</svg>

@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="740" viewBox="0 0 1440 740" font-family="'Helvetica Neue', Arial, sans-serif">
+  <rect width="1440" height="740" fill="#ffffff"/>
+
+  <!-- relationship lines (drawn first, behind boxes) -->
+  <g stroke="#4a5568" stroke-width="2" fill="none">
+    <line x1="360" y1="150" x2="574" y2="330"/>
+    <line x1="360" y1="95" x2="1076" y2="95"/>
+    <line x1="640" y1="474" x2="330" y2="556"/>
+    <line x1="812" y1="474" x2="1130" y2="556"/>
+  </g>
+  <g font-size="15" fill="#4a5568" font-style="italic">
+    <text x="420" y="235">has many</text>
+    <text x="690" y="86" text-anchor="middle">has one</text>
+    <text x="415" y="520">labelled by</text>
+    <text x="985" y="520">engineered into</text>
+  </g>
+  <g font-size="15" font-weight="700" fill="#1b3a5b">
+    <text x="368" y="150">1</text><text x="548" y="342">*</text>
+    <text x="368" y="88">1</text><text x="1055" y="88">1</text>
+    <text x="352" y="558">1</text><text x="300" y="556">1</text>
+    <text x="820" y="490">1</text><text x="1132" y="552">1</text>
+  </g>
+
+  <!-- ICU_STAY -->
+  <g>
+    <rect x="60" y="50" width="300" height="160" rx="6" fill="#ffffff" stroke="#1b3a5b" stroke-width="2"/>
+    <rect x="60" y="50" width="300" height="30" rx="6" fill="#1b3a5b"/>
+    <text x="210" y="71" text-anchor="middle" font-size="16" font-weight="700" fill="#ffffff">ICU_STAY</text>
+    <g font-size="14" fill="#1b3a5b">
+      <text x="72" y="102">stay_id (PK)</text><text x="72" y="124">subject_id</text>
+      <text x="72" y="146">Age</text><text x="72" y="168">Gender</text><text x="72" y="190">weight_kg</text>
+    </g>
+  </g>
+
+  <!-- BASELINE_CREATININE -->
+  <g>
+    <rect x="1080" y="50" width="300" height="86" rx="6" fill="#ffffff" stroke="#2e6db4" stroke-width="2"/>
+    <rect x="1080" y="50" width="300" height="30" rx="6" fill="#2e6db4"/>
+    <text x="1230" y="71" text-anchor="middle" font-size="16" font-weight="700" fill="#ffffff">BASELINE_CREATININE</text>
+    <g font-size="14" fill="#1b3a5b"><text x="1092" y="102">stay_id (FK)</text><text x="1092" y="124">baseline_creatinine</text></g>
+  </g>
+
+  <!-- PATIENT_HOUR (center) -->
+  <g>
+    <rect x="570" y="270" width="310" height="204" rx="6" fill="#ffffff" stroke="#26a58a" stroke-width="2.5"/>
+    <rect x="570" y="270" width="310" height="30" rx="6" fill="#26a58a"/>
+    <text x="725" y="291" text-anchor="middle" font-size="16" font-weight="700" fill="#ffffff">PATIENT_HOUR</text>
+    <g font-size="14" fill="#1b3a5b">
+      <text x="582" y="322">stay_id (FK)</text><text x="582" y="344">ICULOS</text>
+      <text x="582" y="366">HR</text><text x="582" y="388">MAP</text>
+      <text x="582" y="410">Creatinine</text><text x="582" y="432">urine_rate</text><text x="582" y="454">urine_observed</text>
+    </g>
+  </g>
+
+  <!-- AKI_LABEL -->
+  <g>
+    <rect x="60" y="560" width="300" height="160" rx="6" fill="#ffffff" stroke="#e0a233" stroke-width="2"/>
+    <rect x="60" y="560" width="300" height="30" rx="6" fill="#e0a233"/>
+    <text x="210" y="581" text-anchor="middle" font-size="16" font-weight="700" fill="#3a2c07">AKI_LABEL</text>
+    <g font-size="14" fill="#1b3a5b">
+      <text x="72" y="612">stay_id (FK)</text><text x="72" y="634">ICULOS</text>
+      <text x="72" y="656">aki_label_6h</text><text x="72" y="678">aki_label_12h</text><text x="72" y="700">aki_label_24h</text>
+    </g>
+  </g>
+
+  <!-- FEATURE_ROW -->
+  <g>
+    <rect x="1080" y="560" width="300" height="138" rx="6" fill="#ffffff" stroke="#4a5568" stroke-width="2"/>
+    <rect x="1080" y="560" width="300" height="30" rx="6" fill="#4a5568"/>
+    <text x="1230" y="581" text-anchor="middle" font-size="16" font-weight="700" fill="#ffffff">FEATURE_ROW</text>
+    <g font-size="14" fill="#1b3a5b">
+      <text x="1092" y="612">stay_id (FK)</text><text x="1092" y="634">ICULOS</text>
+      <text x="1092" y="656">creatinine_velocity_12h</text><text x="1092" y="678">cr_ratio_baseline</text>
+    </g>
+  </g>
+</svg>

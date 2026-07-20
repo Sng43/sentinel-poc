@@ -52,7 +52,7 @@ _KEY_LAB_COLUMNS: list[str] = [
 # and — critically — the labels/meta added downstream. Including any aki_label_*,
 # _aki_current, or valid_for_training column would leak the target into training.
 _EXCLUDE_FROM_FEATURES: set[str] = {
-    "patient_id", "subject_id", "ICULOS", "t_sepsis", "SepsisLabel",
+    "patient_id", "stay_id", "subject_id", "ICULOS", "t_sepsis", "SepsisLabel",
     "hospital_system", "AKI_label", "AKI_stage",
     "_aki_current", "valid_for_training",
 }

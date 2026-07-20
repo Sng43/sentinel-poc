@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" font-family="'Helvetica Neue', Arial, sans-serif">
+  <defs>
+    <marker id="ah" markerWidth="14" markerHeight="14" refX="10" refY="5" orient="auto">
+      <path d="M0,0 L11,5 L0,10 Z" fill="#1b3a5b"/>
+    </marker>
+    <marker id="ahr" markerWidth="14" markerHeight="14" refX="10" refY="5" orient="auto">
+      <path d="M0,0 L11,5 L0,10 Z" fill="#4a5568"/>
+    </marker>
+  </defs>
+  <rect width="1600" height="900" fill="#ffffff"/>
+  <text x="800" y="34" text-anchor="middle" font-size="26" font-weight="700" fill="#1b3a5b">A /predict request: validation → calibrated inference → SHAP → conformal band → alert</text>
+
+  <!-- lifelines -->
+  <g stroke="#9aa7b4" stroke-width="2" stroke-dasharray="6 6">
+    <line x1="150" y1="95" x2="150" y2="835"/>
+    <line x1="480" y1="95" x2="480" y2="835"/>
+    <line x1="810" y1="95" x2="810" y2="835"/>
+    <line x1="1120" y1="95" x2="1120" y2="835"/>
+    <line x1="1440" y1="95" x2="1440" y2="835"/>
+  </g>
+
+  <!-- backend activation bar -->
+  <rect x="472" y="165" width="16" height="640" fill="#cfe0f2"/>
+
+  <!-- participant headers -->
+  <g>
+    <rect x="35"   y="45" width="230" height="52" rx="10" fill="#1b3a5b"/>
+    <text x="150"  y="78" text-anchor="middle" font-size="20" font-weight="700" fill="#ffffff">Client / Dashboard</text>
+    <rect x="365"  y="45" width="230" height="52" rx="10" fill="#2e6db4"/>
+    <text x="480"  y="78" text-anchor="middle" font-size="20" font-weight="700" fill="#ffffff">FastAPI Backend</text>
+    <rect x="695"  y="45" width="230" height="52" rx="10" fill="#26a58a"/>
+    <text x="810"  y="78" text-anchor="middle" font-size="20" font-weight="700" fill="#ffffff">Stage-2 Model</text>
+    <rect x="1005" y="45" width="230" height="52" rx="10" fill="#e0a233"/>
+    <text x="1120" y="78" text-anchor="middle" font-size="20" font-weight="700" fill="#3a2c07">SHAP Explainer</text>
+    <rect x="1325" y="45" width="230" height="52" rx="10" fill="#4a5568"/>
+    <text x="1440" y="78" text-anchor="middle" font-size="20" font-weight="700" fill="#ffffff">Conformal Band</text>
+  </g>
+
+  <!-- messages -->
+  <g font-size="18" fill="#1b3a5b">
+    <!-- 1 -->
+    <text x="315" y="162" text-anchor="middle">POST /predict (feature row)</text>
+    <line x1="150" y1="170" x2="470" y2="170" stroke="#1b3a5b" stroke-width="2.5" marker-end="url(#ah)"/>
+
+    <!-- 2 self validate -->
+    <path d="M488,230 H568 V262 H492" fill="none" stroke="#1b3a5b" stroke-width="2.5" marker-end="url(#ah)"/>
+    <text x="578" y="242" font-size="17" fill="#1b3a5b">validate payload  (→ 422 if malformed)</text>
+
+    <!-- 3 -->
+    <text x="645" y="332" text-anchor="middle">calibrated inference</text>
+    <line x1="488" y1="340" x2="800" y2="340" stroke="#1b3a5b" stroke-width="2.5" marker-end="url(#ah)"/>
+    <!-- 4 return -->
+    <text x="645" y="402" text-anchor="middle" fill="#4a5568">risk probability  p</text>
+    <line x1="810" y1="410" x2="490" y2="410" stroke="#4a5568" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#ahr)"/>
+
+    <!-- 5 -->
+    <text x="800" y="482" text-anchor="middle">attribute score</text>
+    <line x1="488" y1="490" x2="1110" y2="490" stroke="#1b3a5b" stroke-width="2.5" marker-end="url(#ah)"/>
+    <!-- 6 return -->
+    <text x="800" y="552" text-anchor="middle" fill="#4a5568">top-3 SHAP contributors</text>
+    <line x1="1120" y1="560" x2="490" y2="560" stroke="#4a5568" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#ahr)"/>
+
+    <!-- 7 -->
+    <text x="960" y="632" text-anchor="middle">band(p)</text>
+    <line x1="488" y1="640" x2="1430" y2="640" stroke="#1b3a5b" stroke-width="2.5" marker-end="url(#ah)"/>
+    <!-- 8 return -->
+    <text x="960" y="702" text-anchor="middle" fill="#4a5568">risk level  /  INDETERMINATE</text>
+    <line x1="1440" y1="710" x2="490" y2="710" stroke="#4a5568" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#ahr)"/>
+
+    <!-- 9 return to client -->
+    <text x="315" y="782" text-anchor="middle" fill="#4a5568">alert JSON  {risk, level, contributors, action}</text>
+    <line x1="472" y1="790" x2="156" y2="790" stroke="#4a5568" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#ahr)"/>
+  </g>
+</svg>

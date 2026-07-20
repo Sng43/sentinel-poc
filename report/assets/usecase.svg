@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1320" height="700" viewBox="0 0 1320 700" font-family="'Helvetica Neue', Arial, sans-serif">
+  <defs>
+    <marker id="ar" markerWidth="12" markerHeight="12" refX="9" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 Z" fill="#4a5568"/></marker>
+  </defs>
+  <rect width="1320" height="700" fill="#ffffff"/>
+
+  <!-- Clinician actor (stick figure) -->
+  <g stroke="#1b3a5b" stroke-width="3" fill="none">
+    <circle cx="110" cy="250" r="22" fill="#1b3a5b"/>
+    <line x1="110" y1="272" x2="110" y2="345"/>
+    <line x1="70" y1="300" x2="150" y2="300"/>
+    <line x1="110" y1="345" x2="82" y2="400"/>
+    <line x1="110" y1="345" x2="138" y2="400"/>
+  </g>
+  <text x="110" y="430" text-anchor="middle" font-size="21" font-weight="700" fill="#1b3a5b">Clinician</text>
+
+  <!-- System boundary -->
+  <rect x="340" y="70" width="600" height="590" rx="12" fill="none" stroke="#1b3a5b" stroke-width="2"/>
+  <text x="640" y="104" text-anchor="middle" font-size="22" font-weight="700" fill="#1b3a5b">Project Sentinel</text>
+
+  <!-- Use cases -->
+  <g font-size="18" fill="#1b3a5b" text-anchor="middle">
+    <ellipse cx="640" cy="185" rx="176" ry="42" fill="#eef4fb" stroke="#2e6db4" stroke-width="2"/>
+    <text x="640" y="191">View ward roster ranked by risk</text>
+    <ellipse cx="640" cy="315" rx="176" ry="42" fill="#eef4fb" stroke="#2e6db4" stroke-width="2"/>
+    <text x="640" y="321">Score a patient-hour</text>
+    <ellipse cx="640" cy="445" rx="176" ry="42" fill="#eef4fb" stroke="#2e6db4" stroke-width="2"/>
+    <text x="640" y="451">View calibrated risk alert</text>
+    <ellipse cx="640" cy="575" rx="176" ry="42" fill="#eef4fb" stroke="#2e6db4" stroke-width="2"/>
+    <text x="640" y="581">View SHAP explanation</text>
+  </g>
+
+  <!-- AI Inference Engine actor (system actor as box) -->
+  <rect x="1120" y="278" width="180" height="74" rx="8" fill="#26a58a"/>
+  <text x="1210" y="308" text-anchor="middle" font-size="18" font-weight="700" fill="#ffffff">AI Inference</text>
+  <text x="1210" y="332" text-anchor="middle" font-size="18" font-weight="700" fill="#ffffff">Engine</text>
+
+  <!-- association lines Clinician -> use cases -->
+  <g stroke="#4a5568" stroke-width="2">
+    <line x1="150" y1="300" x2="462" y2="196" marker-end="url(#ar)"/>
+    <line x1="150" y1="310" x2="462" y2="315" marker-end="url(#ar)"/>
+    <line x1="150" y1="320" x2="462" y2="436" marker-end="url(#ar)"/>
+  </g>
+
+  <!-- include relationships -->
+  <g stroke="#4a5568" stroke-width="2" stroke-dasharray="7 5">
+    <line x1="640" y1="357" x2="640" y2="401" marker-end="url(#ar)"/>
+    <line x1="640" y1="487" x2="640" y2="531" marker-end="url(#ar)"/>
+    <line x1="816" y1="315" x2="1116" y2="315" marker-end="url(#ar)"/>
+  </g>
+  <text x="662" y="384" font-size="14" fill="#4a5568">«include»</text>
+  <text x="662" y="514" font-size="14" fill="#4a5568">«include»</text>
+  <text x="905" y="305" text-anchor="middle" font-size="14" fill="#4a5568">executed by</text>
+</svg>

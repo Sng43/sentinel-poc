@@ -1,0 +1,87 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="540" viewBox="0 0 1440 540" font-family="'Helvetica Neue', Arial, sans-serif">
+  <defs>
+    <marker id="sld" markerWidth="12" markerHeight="12" refX="9" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 Z" fill="#4a5568"/></marker>
+  </defs>
+  <rect width="1440" height="540" fill="#ffffff"/>
+
+  <!-- SentinelAPI (controller) -->
+  <g>
+    <rect x="560" y="24" width="340" height="150" rx="6" fill="#ffffff" stroke="#26a58a" stroke-width="2"/>
+    <rect x="560" y="24" width="340" height="34" rx="6" fill="#26a58a"/>
+    <text x="730" y="47" text-anchor="middle" font-size="19" font-weight="700" fill="#ffffff">SentinelAPI</text>
+    <line x1="560" y1="58" x2="900" y2="58" stroke="#26a58a" stroke-width="1"/>
+    <g font-size="15" fill="#1b3a5b">
+      <text x="572" y="82">+ health()</text>
+      <text x="572" y="106">+ patients(n)</text>
+      <text x="572" y="130">+ sample()</text>
+      <text x="572" y="158">+ predict(PatientHour): ClinicalAlert</text>
+    </g>
+  </g>
+
+  <!-- association arrows -->
+  <g stroke="#4a5568" stroke-width="2">
+    <line x1="700" y1="174" x2="170" y2="336" stroke-dasharray="7 5" marker-end="url(#sld)"/>
+    <line x1="710" y1="174" x2="440" y2="336" marker-end="url(#sld)"/>
+    <line x1="730" y1="176" x2="715" y2="336" marker-end="url(#sld)"/>
+    <line x1="750" y1="174" x2="1000" y2="336" marker-end="url(#sld)"/>
+    <line x1="760" y1="174" x2="1275" y2="336" stroke-dasharray="7 5" marker-end="url(#sld)"/>
+  </g>
+  <g font-size="14" fill="#4a5568">
+    <text x="330" y="250">consumes</text>
+    <text x="545" y="250">uses</text>
+    <text x="735" y="255">uses</text>
+    <text x="900" y="250">uses</text>
+    <text x="1075" y="250">produces</text>
+  </g>
+
+  <!-- PatientHour -->
+  <g>
+    <rect x="30" y="336" width="250" height="96" rx="6" fill="#ffffff" stroke="#1b3a5b" stroke-width="2"/>
+    <rect x="30" y="336" width="250" height="32" rx="6" fill="#1b3a5b"/>
+    <text x="155" y="358" text-anchor="middle" font-size="17" font-weight="700" fill="#ffffff">PatientHour</text>
+    <g font-size="15" fill="#1b3a5b"><text x="42" y="392">+ patient_id: str</text><text x="42" y="416">+ features: dict</text></g>
+  </g>
+
+  <!-- SentinelModel -->
+  <g>
+    <rect x="310" y="336" width="250" height="150" rx="6" fill="#ffffff" stroke="#2e6db4" stroke-width="2"/>
+    <rect x="310" y="336" width="250" height="32" rx="6" fill="#2e6db4"/>
+    <text x="435" y="358" text-anchor="middle" font-size="17" font-weight="700" fill="#ffffff">SentinelModel</text>
+    <g font-size="15" fill="#1b3a5b"><text x="322" y="392">+ stage2_model</text><text x="322" y="416">+ calibrator</text></g>
+    <line x1="310" y1="430" x2="560" y2="430" stroke="#2e6db4" stroke-width="1"/>
+    <text x="322" y="456" font-size="15" fill="#1b3a5b">+ predict(): float</text>
+  </g>
+
+  <!-- ConformalGate -->
+  <g>
+    <rect x="590" y="336" width="250" height="150" rx="6" fill="#ffffff" stroke="#4a5568" stroke-width="2"/>
+    <rect x="590" y="336" width="250" height="32" rx="6" fill="#4a5568"/>
+    <text x="715" y="358" text-anchor="middle" font-size="17" font-weight="700" fill="#ffffff">ConformalGate</text>
+    <g font-size="15" fill="#1b3a5b"><text x="602" y="392">+ qhat: float</text><text x="602" y="416">+ alpha: float</text></g>
+    <line x1="590" y1="430" x2="840" y2="430" stroke="#4a5568" stroke-width="1"/>
+    <text x="602" y="456" font-size="15" fill="#1b3a5b">+ band(risk): str</text>
+  </g>
+
+  <!-- Explainer -->
+  <g>
+    <rect x="870" y="336" width="250" height="122" rx="6" fill="#ffffff" stroke="#e0a233" stroke-width="2"/>
+    <rect x="870" y="336" width="250" height="32" rx="6" fill="#e0a233"/>
+    <text x="995" y="358" text-anchor="middle" font-size="17" font-weight="700" fill="#3a2c07">Explainer</text>
+    <text x="882" y="392" font-size="15" fill="#1b3a5b">+ explainer: TreeExplainer</text>
+    <line x1="870" y1="404" x2="1120" y2="404" stroke="#e0a233" stroke-width="1"/>
+    <text x="882" y="430" font-size="15" fill="#1b3a5b">+ explain(): list</text>
+  </g>
+
+  <!-- ClinicalAlert -->
+  <g>
+    <rect x="1150" y="336" width="260" height="150" rx="6" fill="#ffffff" stroke="#1b3a5b" stroke-width="2"/>
+    <rect x="1150" y="336" width="260" height="32" rx="6" fill="#1b3a5b"/>
+    <text x="1280" y="358" text-anchor="middle" font-size="17" font-weight="700" fill="#ffffff">ClinicalAlert</text>
+    <g font-size="14" fill="#1b3a5b">
+      <text x="1162" y="390">+ risk_score: float</text>
+      <text x="1162" y="412">+ risk_level: str</text>
+      <text x="1162" y="434">+ top_contributors: list</text>
+      <text x="1162" y="456">+ recommended_action: str</text>
+    </g>
+  </g>
+</svg>
