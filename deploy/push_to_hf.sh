@@ -30,7 +30,11 @@ cp "$DEPLOY_DIR/hf-space-README.md" README.md
 rm -rf src backend models frontend data
 cp -R "$PS/src" "$PS/backend" "$PS/models" .
 mkdir -p data/processed
-cp "$PS/data/processed/test.parquet" data/processed/
+# Slim the (full-data, ~63 MB) test set to a demo-sized sample before baking it into the
+# image — the ward dashboard only ever shows ~12 patients, so a few hundred rows is plenty
+# and keeps the Space image small + fast to boot. Seeded for reproducibility.
+( cd "$PS" && uv run python -c "import pandas as pd; pd.read_parquet('data/processed/test.parquet').sample(n=800, random_state=42).to_parquet('$STAGE/space/data/processed/test.parquet', index=False)" )
+echo "  → slimmed test.parquet to 800 rows for the demo"
 # frontend source only (node_modules/dist are rebuilt inside the image)
 mkdir -p frontend
 rsync -a --exclude node_modules --exclude dist "$PS/frontend/" frontend/

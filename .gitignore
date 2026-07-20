@@ -29,14 +29,9 @@ mimic_iv_demo/
 mimic_demo_project/mimic_iv_demo/
 
 # ── Model + output artifacts ─────────────────────────────
-# Demo models are tiny (~3 MB) so they live in git for now. RE-IGNORE this dir
-# when scaling to full MIMIC-IV — those models will blow past GitHub's 100 MB
-# limit and belong on HF Hub instead.
+# Full-data models (~20 MB) live in git for now. RE-IGNORE this dir if the models
+# grow past GitHub's 100 MB limit — they belong on HF Hub at that point.
 # project_sentinel/models/
-project_sentinel/outputs/figures/*
-project_sentinel/outputs/reports/*
+# Full-data evaluation reports, figures, and SHAP alerts ARE committed — they're the
+# capstone evidence and are small (<2 MB total). Only the scratch models/ subdir is ignored.
 project_sentinel/outputs/models/*
-project_sentinel/outputs/**/*.png
-project_sentinel/outputs/**/*.json
-project_sentinel/outputs/**/*.csv
-!project_sentinel/outputs/**/.gitkeep

@@ -1,0 +1,272 @@
+[
+  {
+    "patient_id": "3269",
+    "risk_score": 0.5267,
+    "risk_level": "INDETERMINATE",
+    "aki_probability_24h": "53%",
+    "top_contributors": [
+      {
+        "feature": "Baseline creatinine",
+        "direction": "LOW",
+        "value": "8.4",
+        "shap_impact": -1.0278
+      },
+      {
+        "feature": "Creatinine max 12h",
+        "direction": "HIGH",
+        "value": "8.6",
+        "shap_impact": 0.97
+      },
+      {
+        "feature": "Creatinine mean 12h",
+        "direction": "HIGH",
+        "value": "8.5",
+        "shap_impact": 0.4646
+      }
+    ],
+    "recommended_action": "Model abstains — prediction is too uncertain to act on for this patient (out-of-distribution / borderline). Rely on clinical judgement and standard KDIGO monitoring; do not over-trust the score"
+  },
+  {
+    "patient_id": "442",
+    "risk_score": 0.5718,
+    "risk_level": "INDETERMINATE",
+    "aki_probability_24h": "57%",
+    "top_contributors": [
+      {
+        "feature": "Creatinine max 12h",
+        "direction": "LOW",
+        "value": "0.7",
+        "shap_impact": -0.395
+      },
+      {
+        "feature": "Baseexcess",
+        "direction": "HIGH",
+        "value": "0.0",
+        "shap_impact": 0.305
+      },
+      {
+        "feature": "Ph",
+        "direction": "HIGH",
+        "value": "7.38",
+        "shap_impact": 0.25
+      }
+    ],
+    "recommended_action": "Model abstains — prediction is too uncertain to act on for this patient (out-of-distribution / borderline). Rely on clinical judgement and standard KDIGO monitoring; do not over-trust the score"
+  },
+  {
+    "patient_id": "3836",
+    "risk_score": 0.9638,
+    "risk_level": "HIGH",
+    "aki_probability_24h": "96%",
+    "top_contributors": [
+      {
+        "feature": "Creatinine above baseline",
+        "direction": "RISING",
+        "value": "0.3",
+        "shap_impact": 2.8894
+      },
+      {
+        "feature": "Creatinine / baseline ratio",
+        "direction": "RISING",
+        "value": "1.5",
+        "shap_impact": 0.5797
+      },
+      {
+        "feature": "Age",
+        "direction": "FALLING",
+        "value": "32.0",
+        "shap_impact": -0.3386
+      }
+    ],
+    "recommended_action": "URGENT: Consider immediate nephrology consultation, initiate fluid balance monitoring, and review nephrotoxic medications"
+  },
+  {
+    "patient_id": "3242",
+    "risk_score": 0.4624,
+    "risk_level": "INDETERMINATE",
+    "aki_probability_24h": "46%",
+    "top_contributors": [
+      {
+        "feature": "Creatinine above baseline",
+        "direction": "FALLING",
+        "value": "nan",
+        "shap_impact": -0.2678
+      },
+      {
+        "feature": "Creatinine max 12h",
+        "direction": "HIGH",
+        "value": "nan",
+        "shap_impact": 0.139
+      },
+      {
+        "feature": "Baseline creatinine",
+        "direction": "HIGH",
+        "value": "6.9",
+        "shap_impact": 0.1314
+      }
+    ],
+    "recommended_action": "Model abstains — prediction is too uncertain to act on for this patient (out-of-distribution / borderline). Rely on clinical judgement and standard KDIGO monitoring; do not over-trust the score"
+  },
+  {
+    "patient_id": "447",
+    "risk_score": 0.4014,
+    "risk_level": "INDETERMINATE",
+    "aki_probability_24h": "40%",
+    "top_contributors": [
+      {
+        "feature": "Creatinine above baseline",
+        "direction": "FALLING",
+        "value": "0.1",
+        "shap_impact": -0.2898
+      },
+      {
+        "feature": "Ptt",
+        "direction": "HIGH",
+        "value": "38.8",
+        "shap_impact": 0.1954
+      },
+      {
+        "feature": "Urine rate",
+        "direction": "LOW",
+        "value": "nan",
+        "shap_impact": -0.1722
+      }
+    ],
+    "recommended_action": "Model abstains — prediction is too uncertain to act on for this patient (out-of-distribution / borderline). Rely on clinical judgement and standard KDIGO monitoring; do not over-trust the score"
+  },
+  {
+    "patient_id": "3822",
+    "risk_score": 0.367,
+    "risk_level": "MEDIUM",
+    "aki_probability_24h": "37%",
+    "top_contributors": [
+      {
+        "feature": "Creatinine above baseline",
+        "direction": "FALLING",
+        "value": "nan",
+        "shap_impact": -0.2809
+      },
+      {
+        "feature": "Urine rate",
+        "direction": "HIGH",
+        "value": "0.9611",
+        "shap_impact": 0.1667
+      },
+      {
+        "feature": "Creatinine max 12h",
+        "direction": "LOW",
+        "value": "nan",
+        "shap_impact": -0.1538
+      }
+    ],
+    "recommended_action": "Consider nephrology review and fluid balance optimization. Increase creatinine monitoring frequency to q4h"
+  },
+  {
+    "patient_id": "3278",
+    "risk_score": 0.1499,
+    "risk_level": "LOW",
+    "aki_probability_24h": "15%",
+    "top_contributors": [
+      {
+        "feature": "Creatinine above baseline",
+        "direction": "FALLING",
+        "value": "0.0",
+        "shap_impact": -0.4286
+      },
+      {
+        "feature": "Creatinine max 12h",
+        "direction": "LOW",
+        "value": "0.6",
+        "shap_impact": -0.3534
+      },
+      {
+        "feature": "Baseline creatinine",
+        "direction": "HIGH",
+        "value": "0.6",
+        "shap_impact": 0.2191
+      }
+    ],
+    "recommended_action": "Continue standard monitoring. Reassess in 6 hours"
+  },
+  {
+    "patient_id": "450",
+    "risk_score": 0.2568,
+    "risk_level": "LOW",
+    "aki_probability_24h": "26%",
+    "top_contributors": [
+      {
+        "feature": "Creatinine max 12h",
+        "direction": "LOW",
+        "value": "0.2",
+        "shap_impact": -0.645
+      },
+      {
+        "feature": "Creatinine above baseline",
+        "direction": "FALLING",
+        "value": "nan",
+        "shap_impact": -0.3385
+      },
+      {
+        "feature": "Baseline creatinine",
+        "direction": "HIGH",
+        "value": "0.6",
+        "shap_impact": 0.2607
+      }
+    ],
+    "recommended_action": "Continue standard monitoring. Reassess in 6 hours"
+  },
+  {
+    "patient_id": "3881",
+    "risk_score": 0.2628,
+    "risk_level": "LOW",
+    "aki_probability_24h": "26%",
+    "top_contributors": [
+      {
+        "feature": "Urine rate",
+        "direction": "LOW",
+        "value": "5.2556",
+        "shap_impact": -0.5145
+      },
+      {
+        "feature": "Creatinine above baseline",
+        "direction": "FALLING",
+        "value": "0.0",
+        "shap_impact": -0.3787
+      },
+      {
+        "feature": "Weight kg",
+        "direction": "HIGH",
+        "value": "104.65",
+        "shap_impact": 0.3684
+      }
+    ],
+    "recommended_action": "Continue standard monitoring. Reassess in 6 hours"
+  },
+  {
+    "patient_id": "446",
+    "risk_score": 0.1969,
+    "risk_level": "LOW",
+    "aki_probability_24h": "20%",
+    "top_contributors": [
+      {
+        "feature": "Creatinine max 12h",
+        "direction": "LOW",
+        "value": "1.1",
+        "shap_impact": -0.1926
+      },
+      {
+        "feature": "Urine rate",
+        "direction": "LOW",
+        "value": "nan",
+        "shap_impact": -0.1919
+      },
+      {
+        "feature": "Age",
+        "direction": "RISING",
+        "value": "81.0",
+        "shap_impact": 0.1509
+      }
+    ],
+    "recommended_action": "Continue standard monitoring. Reassess in 6 hours"
+  }
+]
