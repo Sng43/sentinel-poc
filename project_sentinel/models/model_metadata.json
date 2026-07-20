@@ -6,7 +6,7 @@
   ],
   "alert_threshold": 0.35,
   "conformal_alpha": 0.1,
-  "conformal_qhat_stage2_24h": 0.6379081631454571,
+  "conformal_qhat_stage2_24h": 0.6304521501093803,
   "stage1_features": [
     "HR",
     "MAP",
@@ -218,7 +218,6 @@
     "pH",
     "pH_observed",
     "renal_perf_pressure",
-    "stay_id",
     "urine_observed",
     "urine_rate",
     "wbc_lactate_product",
@@ -226,12 +225,12 @@
   ],
   "library_versions": {
     "lightgbm": "4.6.0",
-    "xgboost": "3.2.0",
-    "scikit-learn": "1.8.0",
-    "numpy": "2.4.6",
-    "pandas": "3.0.3",
+    "xgboost": "3.3.0",
+    "scikit-learn": "1.6.1",
+    "numpy": "2.0.2",
+    "pandas": "2.2.2",
     "shap": "0.52.0"
   },
-  "python": "3.12.12",
-  "git_commit": "eac2e4c918e2500eaa922c7ecb4e63f02027cc4d"
+  "python": "3.12.13",
+  "git_commit": "47a5ffd8315ae67c3e02171718c3670404e64ad6"
 }
