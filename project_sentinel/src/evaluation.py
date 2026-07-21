@@ -66,14 +66,18 @@ def threshold_metrics(y_true: np.ndarray, y_prob: np.ndarray, threshold: float =
     ppv = tp / (tp + fp) if (tp + fp) > 0 else 0.0
     npv = tn / (tn + fn) if (tn + fn) > 0 else 0.0
     f1 = 2 * (ppv * sensitivity) / (ppv + sensitivity) if (ppv + sensitivity) > 0 else 0.0
-    
+    accuracy = (tp + tn) / (tp + tn + fp + fn) if (tp + tn + fp + fn) > 0 else 0.0
+
     return {
         "threshold": threshold,
-        "sensitivity": sensitivity,
+        "accuracy": accuracy,          # note: misleading under class imbalance — see report
+        "sensitivity": sensitivity,    # = recall
         "specificity": specificity,
-        "ppv": ppv,
+        "ppv": ppv,                    # = precision
         "npv": npv,
-        "f1": f1
+        "f1": f1,
+        # raw confusion-matrix counts (tn/fp/fn/tp) at this threshold
+        "tn": int(tn), "fp": int(fp), "fn": int(fn), "tp": int(tp),
     }
 
 def plot_calibration_curves(results_dict: Dict[str, Tuple[np.ndarray, np.ndarray]], output_path: Optional[str] = None) -> None:
