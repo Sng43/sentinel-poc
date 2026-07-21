@@ -407,12 +407,36 @@ def train_stage1_models(
     return results
 
 
+def _apply_feature_dropout(
+    X: pd.DataFrame, p: float, seed: int = 42
+) -> pd.DataFrame:
+    """Augment training data for missing-feature robustness.
+
+    Returns ``concat(X_clean, X_masked)`` where the masked copy has each cell set
+    to NaN with probability *p*. Training on this teaches the model to predict
+    when features are absent — the reality at resource-limited hospitals that lack
+    the full lab panel (see the feature-tier degradation analysis). The label is
+    unchanged for the masked copy (same patient, some values hidden), so callers
+    duplicate ``y`` alongside.
+
+    ponytail: per-*cell* dropout — a simple proxy. The realistic case is whole
+    labs missing (per-column, per-patient); upgrade to column-group masking if the
+    tier analysis shows this isn't enough.
+    """
+    rng = np.random.default_rng(seed)
+    masked = X.to_numpy(dtype="float64", copy=True)
+    masked[rng.random(masked.shape) < p] = np.nan
+    masked_df = pd.DataFrame(masked, columns=X.columns)
+    return pd.concat([X.reset_index(drop=True), masked_df], ignore_index=True)
+
+
 def train_stage2_models(
     train_data: pd.DataFrame,
     val_data: pd.DataFrame,
     feature_cols: list[str],
     horizons: list[int] | None = None,
     n_optuna_trials: int = 50,
+    feature_dropout: float = 0.0,
 ) -> dict[int, dict[str, dict[str, Any]]]:
     """Train Stage-2 LightGBM + XGBoost models with Optuna tuning.
 
@@ -451,6 +475,15 @@ def train_stage2_models(
     results: dict[int, dict[str, dict[str, Any]]] = {}
     X_train = train_data[feature_cols]
     X_val = val_data[feature_cols]
+
+    # Missing-feature robustness: fit on clean + randomly-masked copies so the model
+    # degrades gracefully when a hospital lacks labs. Validation/calibration stay
+    # CLEAN (we calibrate for the real, fully-observed distribution).
+    X_fit = X_train
+    _augmented = feature_dropout and feature_dropout > 0.0
+    if _augmented:
+        logger.info("Feature-dropout augmentation: p=%.2f (train set doubled).", feature_dropout)
+        X_fit = _apply_feature_dropout(X_train, feature_dropout)
 
     # ------------------------------------------------------------------
     # Optuna tuning on 24h horizon (reused for other horizons)
@@ -499,14 +532,17 @@ def train_stage2_models(
         if not _check_sufficient_positives(y_val, context=f"Stage-2 {h}h (val)"):
             continue
 
+        # match y to the (possibly doubled) fit set; masked copy shares the label
+        y_fit = np.concatenate([y_train, y_train]) if _augmented else y_train
+
         # ---- LightGBM ------------------------------------------------
         lgbm_model = train_lgbm(
-            X_train, y_train, X_val, y_val, params=tuned_lgbm_params
+            X_fit, y_fit, X_val, y_val, params=tuned_lgbm_params
         )
         lgbm_calibrator = calibrate_model(lgbm_model, X_val, y_val)
 
         # ---- XGBoost --------------------------------------------------
-        xgb_model = train_xgb(X_train, y_train, X_val, y_val)
+        xgb_model = train_xgb(X_fit, y_fit, X_val, y_val)
         xgb_calibrator = calibrate_model(xgb_model, X_val, y_val)
 
         results[h] = {

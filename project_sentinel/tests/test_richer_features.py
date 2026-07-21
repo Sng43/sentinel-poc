@@ -59,7 +59,21 @@ def test_nephrotoxin_detection_and_hour_mapping():
     assert len(out) == 2            # acetaminophen is NOT nephrotoxic → excluded
 
 
+def test_feature_dropout_augmentation():
+    from src.models import _apply_feature_dropout
+    X = pd.DataFrame(np.ones((200, 6)), columns=list("abcdef"))
+    aug = _apply_feature_dropout(X, p=0.25, seed=7)
+    assert len(aug) == 400                                   # clean + masked copy
+    assert aug.iloc[:200].isna().sum().sum() == 0            # clean half untouched
+    frac = aug.iloc[200:].isna().mean().mean()
+    assert 0.15 < frac < 0.35, frac                          # ~25% masked
+    # p=0 must be a no-op-ish (still doubles but masks nothing)
+    aug0 = _apply_feature_dropout(X, p=0.0)
+    assert aug0.isna().sum().sum() == 0
+
+
 if __name__ == "__main__":
     test_sofa_partial_scoring()
     test_nephrotoxin_detection_and_hour_mapping()
-    print("OK — SOFA + nephrotoxin feature logic verified")
+    test_feature_dropout_augmentation()
+    print("OK — SOFA + nephrotoxin + feature-dropout logic verified")
