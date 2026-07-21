@@ -11,6 +11,7 @@ Run from project_sentinel/:
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -24,7 +25,14 @@ from fastapi.staticfiles import StaticFiles
 from src.explain import generate_clinical_alert
 from src.models import load_models
 
+from backend.fhir_source import fetch_patient_features
+
 _ROOT = Path(__file__).resolve().parent.parent  # project_sentinel/
+
+# Live-EHR integration is opt-in via env: point EHR_FHIR_URL at an OpenMRS/FHIR R4
+# base (e.g. http://host/openmrs/ws/fhir2/R4). Unset → demo runs on the parquet ward.
+EHR_FHIR_URL = os.environ.get("EHR_FHIR_URL")
+EHR_FHIR_TOKEN = os.environ.get("EHR_FHIR_TOKEN")
 
 # --- Load everything once at startup -----------------------------------------
 _meta = json.loads((_ROOT / "models" / "model_metadata.json").read_text())
@@ -64,6 +72,17 @@ def _alert(idx: int) -> dict:
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/config")
+def config() -> dict[str, Any]:
+    """What the UI needs to decide which modes to offer (manual vs live EHR)."""
+    return {
+        "manual_entry": True,          # always available (demo / what-if)
+        "ehr_connected": EHR_FHIR_URL is not None,
+        "ehr_url": EHR_FHIR_URL,       # shown to the user; None when not configured
+        "n_features": len(STAGE2_FEATURES),
+    }
 
 
 @app.get("/patients")
@@ -121,6 +140,25 @@ def predict(patient: dict[str, Any]) -> dict:
         threshold=THRESHOLD,
         conformal_qhat=QHAT,
     )
+
+
+@app.get("/ehr/{patient_id}")
+def ehr(patient_id: str) -> dict:
+    """Live-EHR path: pull a patient from the connected FHIR server → score → alert.
+
+    Requires EHR_FHIR_URL to be set. This is the "no manual typing" flow — the
+    clinician picks a patient id and the record is fetched from the hospital EHR.
+    """
+    if not EHR_FHIR_URL:
+        raise HTTPException(503, "No EHR configured. Set EHR_FHIR_URL to enable the live feed.")
+    try:
+        feats = fetch_patient_features(EHR_FHIR_URL, patient_id, EHR_FHIR_TOKEN)
+    except Exception as e:  # network / parse / auth — surface, don't crash
+        raise HTTPException(502, f"EHR fetch failed: {e}")
+    # feed whatever the EHR supplied through the same scorer; absent features → NaN
+    return predict({f: feats.get(f) for f in STAGE2_FEATURES} | {
+        k: feats[k] for k in ("patient_id", "Age", "Gender") if k in feats
+    })
 
 
 # Serve the built React frontend at "/" so the whole demo is one URL in production
