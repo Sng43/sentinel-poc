@@ -6,7 +6,7 @@
   ],
   "alert_threshold": 0.35,
   "conformal_alpha": 0.1,
-  "conformal_qhat_stage2_24h": 0.6304521501093803,
+  "conformal_qhat_stage2_24h": 0.6247652228895384,
   "stage1_features": [
     "HR",
     "MAP",
@@ -213,11 +213,19 @@
     "cr_ratio_baseline",
     "creatinine_velocity_12h",
     "delta_Cr",
+    "hours_since_nephrotoxin",
     "hours_since_sepsis",
     "map_cr_velocity_interaction",
+    "nephrotoxin_active",
+    "nephrotoxin_started",
     "pH",
     "pH_observed",
     "renal_perf_pressure",
+    "sofa_cardio",
+    "sofa_coag",
+    "sofa_liver",
+    "sofa_partial",
+    "sofa_renal",
     "urine_observed",
     "urine_rate",
     "wbc_lactate_product",
@@ -232,5 +240,5 @@
     "shap": "0.52.0"
   },
   "python": "3.12.13",
-  "git_commit": "47a5ffd8315ae67c3e02171718c3670404e64ad6"
+  "git_commit": "52b0c154bbab8d1e0749f3509d44dbb66f20baae"
 }
