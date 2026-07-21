@@ -208,10 +208,10 @@ function EhrPanel({ config, onScored }: { config: Config; onScored: (a: Alert) =
       <Card className="mb-8 gap-2 p-6">
         <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Live EHR feed — not connected</p>
         <p className="text-[0.8125rem] text-muted-foreground">
-          Set <code className="rounded-sm bg-muted px-1 py-px">EHR_FHIR_URL</code> to a FHIR R4 base
-          (e.g. OpenMRS <code className="rounded-sm bg-muted px-1 py-px">…/openmrs/ws/fhir2/R4</code>) to enable
-          fetching patients directly from the hospital record — no manual entry. The ward below is served from
-          the demo data source meanwhile.
+          Set <code className="rounded-sm bg-muted px-1 py-px">EHR_FHIR_URL</code> to the hospital's FHIR R4 base
+          (<strong>OpenClinic GA</strong>'s FHIR endpoint at the target site, or any FHIR server) to fetch
+          patients directly from the record — no manual entry. The ward below is served from the demo data
+          source meanwhile.
         </p>
       </Card>
     )
@@ -292,7 +292,8 @@ export default function App() {
             <Database className="mt-0.5 size-4 shrink-0 text-primary" />
             <span>
               Patients come from the connected data source (demo: MIMIC-IV). In deployment this feed is the
-              hospital EHR (OpenMRS · OpenClinic GA · FHIR) — clinicians assess patients with no manual entry.
+              hospital HIS — <strong>OpenClinic GA</strong> (FHIR API) at the target site, or any FHIR R4 /
+              OpenMRS server — so clinicians assess patients with no manual entry.
             </span>
           </div>
         )}

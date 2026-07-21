@@ -2,9 +2,14 @@
 
 The backend's ``/predict`` already accepts a plain ``{feature: value}`` dict, so
 integrating any EHR reduces to **one job: turn that hospital's patient record into
-this dict.** HL7 FHIR R4 is the universal way to do that: OpenMRS ships a FHIR2
-module (``/openmrs/ws/fhir2/R4/…``); most modern EHRs and many middleware layers in
-front of OpenClinic GA expose the same standard. So one FHIR adapter covers the lot.
+this dict.** HL7 FHIR R4 is the universal way to do that.
+
+**Primary target: OpenClinic GA** — the HIS running at the deployment hospital (RMRTH,
+Rwanda) and 500+ others. OpenClinic GA exposes an HL7/FHIR API for structured data
+exchange, so this adapter targets it directly; the identical shape also works for
+OpenMRS (``/openmrs/ws/fhir2/R4/…``) and any FHIR R4 server. Point ``EHR_FHIR_URL`` at
+the deployment's FHIR base. Note OpenClinic GA codes with SNOMED CT + LOINC — labs are
+typically LOINC (mapped below); verify each against the live server.
 
 This module fetches a patient's most-recent vitals/labs as FHIR ``Observation``
 resources (coded by LOINC), maps them to the canonical feature names, and returns
