@@ -1,0 +1,12 @@
+{
+  "mode": "HTTP http://127.0.0.1:8124",
+  "machine": "Darwin arm64 \u00b7 Python 3.12.12",
+  "iterations": 200,
+  "mean_ms": 4.41,
+  "p50_ms": 4.29,
+  "p95_ms": 4.91,
+  "p99_ms": 7.28,
+  "min_ms": 4.0,
+  "max_ms": 7.52,
+  "throughput_req_per_s": 226.6
+}

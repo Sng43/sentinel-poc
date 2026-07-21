@@ -142,6 +142,20 @@ _ANTIBIOTIC_KEYWORDS: tuple[str, ...] = (
 # runtime. The demo (12k rows) runs through the same code path in one chunk.
 _CHUNK_ROWS = 5_000_000
 
+# Nephrotoxic-drug name fragments (prescriptions.drug), by class. Exposure to
+# these is a strong, physiologically-motivated AKI risk factor. Matched the same
+# way as the antibiotic proxy. (vancomycin is both antibiotic AND nephrotoxic.)
+_NEPHROTOXIN_KEYWORDS: tuple[str, ...] = (
+    # NSAIDs
+    "ibuprofen", "ketorolac", "naproxen", "diclofenac", "indomethacin", "celecoxib",
+    "meloxicam", "aspirin",
+    # aminoglycosides
+    "gentamicin", "tobramycin", "amikacin", "streptomycin", "neomycin",
+    # other common nephrotoxins
+    "vancomycin", "amphotericin", "acyclovir", "colistin", "cisplatin",
+    "tacrolimus", "cyclosporine",
+)
+
 
 # ---------------------------------------------------------------------------
 # Low-level table loading
@@ -407,6 +421,39 @@ def _hourly_urine(
     return hourly[["stay_id", "ICULOS", "urine_rate", "urine_observed", "weight_kg"]]
 
 
+def _hourly_nephrotoxin(
+    prescriptions: pd.DataFrame,
+    stay_keys: pd.DataFrame,
+) -> pd.DataFrame:
+    """Hours at which a nephrotoxic drug was *started*, per ICU stay.
+
+    Prescriptions are charted at the hadm level, so they are mapped onto ICU
+    stays via (subject_id, hadm_id) and the stay's admission time (same as labs).
+    Returns columns: ``stay_id``, ``ICULOS``, ``nephrotoxin_started`` (1 for any
+    hour in which ≥1 nephrotoxic drug order began). Cumulative-exposure and
+    recency features are derived downstream in :func:`build_hourly_cohort`.
+    """
+    empty = pd.DataFrame(columns=["stay_id", "ICULOS", "nephrotoxin_started"])
+    if prescriptions is None or prescriptions.empty:
+        return empty
+
+    presc = prescriptions.copy()
+    presc["drug_l"] = presc["drug"].astype(str).str.lower()
+    neph = presc[presc["drug_l"].str.contains("|".join(_NEPHROTOXIN_KEYWORDS), na=False)]
+    if neph.empty:
+        return empty
+
+    neph = neph.merge(stay_keys, on=["subject_id", "hadm_id"], how="inner")
+    neph["ICULOS"] = _hour_offset(neph["starttime"], neph["intime"])
+    neph = neph[neph["ICULOS"] >= 0]
+    if neph.empty:
+        return empty
+
+    out = neph.groupby(["stay_id", "ICULOS"]).size().reset_index(name="n")
+    out["nephrotoxin_started"] = 1
+    return out[["stay_id", "ICULOS", "nephrotoxin_started"]]
+
+
 # ---------------------------------------------------------------------------
 # Top-level builder
 # ---------------------------------------------------------------------------
@@ -447,14 +494,17 @@ def build_hourly_cohort(tables: dict[str, pd.DataFrame], data_dir: str) -> pd.Da
     vitals, weights = _stream_chartevents(data_dir, stay_intime)
     labs = _pivot_labs(data_dir, stay_keys)
     urine = _hourly_urine(tables["outputevents"], stay_intime, weights)
+    neph = _hourly_nephrotoxin(tables.get("prescriptions", pd.DataFrame()), stay_keys)
 
     # --- Merge everything onto the grid -------------------------------------
     df = grid.merge(vitals, on=["stay_id", "ICULOS"], how="left")
     df = df.merge(labs, on=["stay_id", "ICULOS"], how="left")
     df = df.merge(urine, on=["stay_id", "ICULOS"], how="left")
+    df = df.merge(neph, on=["stay_id", "ICULOS"], how="left")
 
     # Urine mask: charted → 1, otherwise 0 (NEVER fill the *rate* with 0).
     df["urine_observed"] = df["urine_observed"].fillna(0).astype(int)
+    df["nephrotoxin_started"] = df["nephrotoxin_started"].fillna(0).astype(int)
 
     # --- Attach static demographics -----------------------------------------
     static = icustays[["stay_id", "subject_id"]].merge(
@@ -473,6 +523,17 @@ def build_hourly_cohort(tables: dict[str, pd.DataFrame], data_dir: str) -> pd.Da
         if col not in df.columns:
             df[col] = np.nan
     df = df.sort_values(["patient_id", "ICULOS"]).reset_index(drop=True)
+
+    # --- Nephrotoxin cumulative-exposure + recency (needs the sort above) ----
+    # 1 from the first nephrotoxin start onward in the stay
+    df["nephrotoxin_active"] = (
+        df.groupby("patient_id", sort=False)["nephrotoxin_started"].cummax().astype(int)
+    )
+    # hours since the most recent start (NaN before any exposure): carry the
+    # start-hour forward within each stay, then subtract from the current hour.
+    started_hour = df["ICULOS"].where(df["nephrotoxin_started"] == 1)
+    recent = started_hour.groupby(df["patient_id"], sort=False).ffill()
+    df["hours_since_nephrotoxin"] = df["ICULOS"] - recent
     logger.info(
         "Built hourly cohort: %d stays, %d patient-hours, %d columns.",
         df["patient_id"].nunique(), len(df), df.shape[1],

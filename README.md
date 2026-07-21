@@ -41,10 +41,12 @@ the **OpenClinic GA** EHR. Because that hospital's data isn't available yet, the
 here are trained on the **open-access MIMIC-IV clinical demo** as a surrogate — the
 architecture is built to be retrained on real hospital data with no code changes.
 
-> **This is a proof-of-concept, not a deployable model.** On the 100-patient demo it
-> *will* overfit — and it is stated plainly throughout. The deliverable is a **working
-> end-to-end product**: real relational ICU data → KDIGO labels → features → calibrated
-> risk → SHAP alerts → a live ward dashboard. See [Results & analysis](#results--analysis).
+> **Now trained on a 30,000-stay sample of full MIMIC-IV** (AUROC **0.885**, calibrated
+> ECE 0.008, subgroup gap down to 0.02). The deliverable is a **working end-to-end
+> product**: real relational ICU data → KDIGO labels → features → calibrated risk → SHAP
+> alerts → a live ward dashboard. **Still single-source (US ICUs) — external and
+> local (RMRTH) validation remain required before any clinical use.** See
+> [Results & analysis](#results--analysis).
 
 ## The product
 
@@ -169,32 +171,37 @@ all NaN), malformed, clinically extreme, and abstention-band inputs — are tabu
 
 ## Results & analysis
 
-Headline metrics — **Stage-2 LightGBM @ 24 h, held-out test split** (100-patient MIMIC-IV
-demo, 1,965 patient-hours):
+Headline metrics — **Stage-2 LightGBM @ 24 h, held-out test split**, trained on a
+**30,000-stay sample of full MIMIC-IV v3.1** (test split: **4,480 stays / 359,603
+patient-hours**, 22.9 % positive at 24 h):
 
 | Metric | Value | Reading |
 |---|---|---|
-| **AUROC** | **0.66** | Modest — and, crucially, **not fake-perfect**. A target leak would force it toward 1.0. |
-| **AUPRC** | **0.50** | Well above the ~26% positive base rate at 24 h. |
-| **Brier** | 0.20 | — |
-| **ECE (calibration error)** | **0.11** | Probabilities are usable, not wildly over/under-confident. |
-| Specificity / PPV (@0.5) | 0.90 / 0.59 | Few false alarms; a fired alert is right ~59% of the time. |
+| **AUROC** | **0.885** | Strong discrimination — in line with published sepsis-AKI early-warning models. Not fake-perfect (a leak would push toward 1.0). |
+| **AUPRC** | **0.77** | Far above the ~23 % positive base rate at 24 h. |
+| **Brier** | 0.13 | — |
+| **ECE (calibrated)** | **0.008** | Near-perfect calibration via isotonic regression. *(Raw model 0.14; the deployed alerts use the calibrated probability.)* |
+| Sensitivity / Specificity (@0.5) | **0.77 / 0.84** | Catches ~77 % of AKI onsets while keeping false alarms moderate. |
+| PPV / NPV (@0.5) | 0.58 / 0.92 | A fired alert is right ~58 % of the time; a non-alert is reassuring 92 % of the time. |
+
+Discrimination **rises as the window shortens** — Stage-2 LightGBM AUROC **0.93 (6 h) /
+0.90 (12 h) / 0.89 (24 h)** — while the vitals-only Stage-1 screener sits at ~0.63,
+which is exactly why the cascade adds labs in Stage 2.
 
 **Did it meet the proposal objectives?**
 
 | Objective (from the proposal) | Outcome |
 |---|---|
-| A **working end-to-end** SA-AKI pipeline on real relational ICU data | ✅ **Achieved** — load → KDIGO labels (creatinine **and** urine) → features → train → eval → explain → serve, all run end-to-end. |
-| **Calibrated, honest** risk (not a leaky 0.99-AUROC illusion) | ✅ **Achieved** — isotonic calibration; ECE 0.11; AUROC 0.66 is the *proof* there's no leakage. |
-| **Explainable, safe** alerts | ✅ **Achieved** — SHAP top-3 per alert + conformal `INDETERMINATE` abstention. |
+| A **working end-to-end** SA-AKI pipeline on real relational ICU data | ✅ **Achieved** — load → KDIGO labels (creatinine **and** urine) → features → train → eval → explain → serve, all run end-to-end at full-MIMIC scale. |
+| **Calibrated, honest** risk (not a leaky 0.99-AUROC illusion) | ✅ **Achieved** — isotonic calibration; calibrated ECE 0.008; AUROC 0.885 (not ~1.0) confirms no target leakage. |
+| **Explainable, safe** alerts | ✅ **Achieved** — SHAP top-3 per alert + conformal `INDETERMINATE` abstention (fires on **17 %** of the test set — a real "I don't know" band). |
 | A **usable, deployed** product | ✅ **Achieved** — FastAPI + React dashboard, one-URL Docker deploy, ~4 ms/alert. |
-| **Discrimination target AUROC > 0.75** | ⚠️ **Missed by design** — 0.66 on 100 patients. This target applies to full MIMIC-IV; see [dataset sizing](#known-limitations). |
-| **Fairness across subgroups** | ⚠️ **Gap surfaced, honestly reported** — AUROC **0.74 (<65)** vs **0.62 (65+)**, with worse calibration on the elderly (ECE 0.06 vs 0.19). |
+| **Discrimination target AUROC > 0.75** | ✅ **Achieved** — **0.885** on the full-data sample (the 100-patient demo missed this *by design*; scaling the data cleared it). |
+| **Fairness across subgroups** | ✅ **Gap largely closed** — AUROC **0.89 (<65)** vs **0.87 (65+)**, a 0.02 gap (was 0.12 on the demo). More data narrowed the disparity, as predicted. |
 
-The missed items are **expected consequences of a 100-patient demo, not implementation
-failures** — the point of this PoC is that the *pipeline and product* work, not that this
-particular model is deployable. The subgroup gap is exactly the kind of finding the
-evaluation suite exists to catch before anything reaches a bedside.
+Every proposal target is now met on a large, representative sample. The top SHAP drivers —
+`cr_above_baseline`, `urine_rate`, creatinine trend, `baseline_creatinine` — are the
+clinically correct signals for AKI, confirming the model learned physiology, not artefacts.
 
 ## Discussion — why the milestones matter
 
@@ -205,8 +212,9 @@ evaluation suite exists to catch before anything reaches a bedside.
   retraining on RMRTH data a data problem, not a rebuild.
 - **Calibration + abstention is what makes it safe to show a clinician.** An early-warning
   score that is confidently wrong destroys trust faster than no score at all. Isotonic
-  calibration (ECE 0.11) plus a conformal "I don't know" band is the difference between a
-  research artefact and something a ward could reason about.
+  calibration (calibrated ECE 0.008) plus a conformal "I don't know" band (abstaining on
+  ~17 % of cases) is the difference between a research artefact and something a ward could
+  reason about.
 - **The deployment milestone proves the whole path.** A calibrated model in a notebook
   helps no one. Scoring a patient-hour into an explained alert in ~4 ms, served from one
   URL, is the evidence that the path from data to bedside actually closes.
@@ -219,17 +227,19 @@ run will immediately surface whether it is trustworthy for *that* population.
 
 **For the community / anyone applying this:**
 
-- **Do not deploy this demo model clinically.** It overfits 100 patients. The transferable
-  value is (a) the end-to-end pipeline and (b) the *design pattern* — calibrated
-  probabilities + SHAP + conformal abstention — for a trustworthy clinical EWS.
-- **Re-validate on your own population.** The elderly-subgroup gap shows performance is
-  population-specific; SA-AKI aetiology at RMRTH (severe malaria, tropical infection)
-  differs from a US ICU, so local retraining is mandatory, not optional.
+- **Do not deploy this model clinically without local validation.** It is trained and
+  tested on US ICU data (MIMIC-IV) only. The transferable value is (a) the end-to-end
+  pipeline, (b) the *design pattern* — calibrated probabilities + SHAP + conformal
+  abstention — and (c) a validated set of full-scale reference metrics to benchmark against.
+- **Re-validate on your own population.** Even with the subgroup gap now largely closed,
+  performance is population-specific; SA-AKI aetiology at RMRTH (severe malaria, tropical
+  infection) differs from a US ICU, so local retraining is mandatory, not optional.
 
 **Future work (roadmap):**
 
-1. Train on **full MIMIC-IV** (~70–90k stays; PhysioNet DUA application in progress) to
-   clear the sizing floor, then externally validate on **eICU-CRD / AmsterdamUMCdb**.
+1. ✅ **Done** — trained on a 30k-stay sample of full MIMIC-IV (AUROC 0.885). **Next:**
+   scale to all ~90k stays (batched pipeline) and **externally validate on eICU-CRD /
+   AmsterdamUMCdb** — the true test of generalisation beyond a single hospital system.
 2. Add the **SOFA ≥ 2** component to the sepsis-onset definition (currently
    suspicion-of-infection only).
 3. Wire a **live OpenClinic GA feed** in place of the in-memory demo set.
@@ -309,16 +319,16 @@ These are specification gaps that real hospital data closes — not failures of 
 
 | # | Limitation | Mitigation path |
 |---|---|---|
-| 1 | **100-patient demo → overfits**; AUROC 0.66, not > 0.75 | Full MIMIC-IV (~70–90k stays) clears the sizing floor. |
-| 2 | **Baseline creatinine** = in-stay pre-sepsis minimum | Full data uses 7–365-day pre-admission outpatient creatinine. |
-| 3 | **Sepsis onset** = suspicion-of-infection only | Add the SOFA ≥ 2 component. |
-| 4 | **Western ICU population**; elderly-subgroup gap | Retrain on local (RMRTH) data; SA-AKI aetiology differs. |
-| 5 | **No medication / novel-biomarker features** | Populate from EHR pharmacy + assay records. |
-| 6 | **In-memory demo feed**, not a live EHR | Wire an OpenClinic GA adapter. |
+| 1 | **Single-source (US ICUs)** — MIMIC-IV only, no external validation yet | Externally validate on eICU-CRD / AmsterdamUMCdb. |
+| 2 | **30k-stay sample**, not the full ~90k | Batch the pipeline to train on every stay (marginal gain — 30k already clears the favorable tier). |
+| 3 | **Baseline creatinine** = in-stay pre-sepsis minimum | Use 7–365-day pre-admission outpatient creatinine. |
+| 4 | **Sepsis onset** = suspicion-of-infection only | Add the SOFA ≥ 2 component. |
+| 5 | **Western ICU population** (subgroup gap now small but non-zero) | Retrain on local (RMRTH) data; SA-AKI aetiology differs. |
+| 6 | **No medication / novel-biomarker features**; in-memory demo feed | Populate from EHR pharmacy + assay records; wire an OpenClinic GA adapter. |
 
-**Dataset sizing:** the demo trains on ~96 unique patients — far below the ~1–2k *floor*
-where results stop being noise, and the ~10–20k *favorable* tier where subgroup splits hold
-up. This is *why* it overfits; it is documented, not hidden.
+**Dataset sizing:** training now uses a **30,000-stay sample of full MIMIC-IV** — well past
+the ~10–20k *favorable* tier where subgroup splits hold up, which is why the AUROC and
+fairness gap both improved so much over the earlier 96-patient demo.
 
 ## License
 

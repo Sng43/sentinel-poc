@@ -377,6 +377,49 @@ def add_composite_features(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def add_sofa_features(df: pd.DataFrame) -> pd.DataFrame:
+    """Add a **partial SOFA** (Sequential Organ Failure Assessment) score.
+
+    Four of the six organ systems are scored from columns already in the
+    canonical schema; the other two — respiration (PaO2/FiO2) and CNS (GCS) —
+    are not loaded, so this is a documented *partial* SOFA. The cardiovascular
+    component is capped at 1 (MAP < 70) because vasopressor doses, needed for
+    scores 2–4, are unavailable.
+
+    Per SOFA convention an unmeasured system scores 0 (assumed normal). Call
+    this **after** :func:`impute_values`. New columns: ``sofa_coag``,
+    ``sofa_liver``, ``sofa_cardio``, ``sofa_renal``, ``sofa_partial`` (sum).
+
+    Note: ``sofa_renal`` derives from *current* creatinine, which is already a
+    feature — no new leakage vs the (future) AKI label.
+    """
+    df = df.copy()
+
+    def _col(name: str) -> pd.Series:
+        return df.get(name, pd.Series(np.nan, index=df.index))
+
+    plt_ = _col("Platelets")   # x10^3/µL
+    df["sofa_coag"] = np.select(
+        [plt_ < 20, plt_ < 50, plt_ < 100, plt_ < 150], [4, 3, 2, 1], default=0
+    )
+    bili = _col("Bilirubin_total")   # mg/dL
+    df["sofa_liver"] = np.select(
+        [bili >= 12, bili >= 6, bili >= 2, bili >= 1.2], [4, 3, 2, 1], default=0
+    )
+    map_ = _col("MAP")   # mmHg — vasopressors N/A → cap at 1
+    df["sofa_cardio"] = np.where(map_ < 70, 1, 0)
+    cr = _col("Creatinine")   # mg/dL
+    df["sofa_renal"] = np.select(
+        [cr >= 5.0, cr >= 3.5, cr >= 2.0, cr >= 1.2], [4, 3, 2, 1], default=0
+    )
+
+    df["sofa_partial"] = (
+        df[["sofa_coag", "sofa_liver", "sofa_cardio", "sofa_renal"]].sum(axis=1)
+    )
+    logger.info("Partial SOFA features added (4 of 6 organ systems).")
+    return df
+
+
 # ---------------------------------------------------------------------------
 # 6. Full pipeline orchestrator
 # ---------------------------------------------------------------------------
@@ -395,6 +438,7 @@ def engineer_features(
     3. **Imputation** — fill remaining gaps *after* rolling stats.
     4. **Creatinine velocity** — requires imputed creatinine values.
     5. **Composite features** — interactions that depend on imputed data.
+    6. **Partial SOFA** — organ-dysfunction sub-scores from imputed values.
 
     Parameters
     ----------
@@ -417,6 +461,7 @@ def engineer_features(
     df = impute_values(df)                  # after rolling
     df = add_creatinine_velocity(df, baseline_df)
     df = add_composite_features(df)
+    df = add_sofa_features(df)              # partial SOFA from imputed values
 
     logger.info(
         "Feature engineering complete: %d → %d columns (%d rows).",
