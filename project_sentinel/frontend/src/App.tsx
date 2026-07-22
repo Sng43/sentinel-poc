@@ -125,18 +125,31 @@ function AlertCard({ a, className, onClick, selected }: {
   )
 }
 
-function TriageSummary({ ward }: { ward: Alert[] }) {
+// Triage counts double as risk filters: click a chip to show only that level, click
+// again (or the active one) to clear. `active` is the current filter (null = all).
+function TriageSummary({ ward, active, onToggle }: {
+  ward: Alert[]; active: RiskLevel | null; onToggle: (l: RiskLevel) => void
+}) {
   return (
     <div className="mb-6 flex flex-wrap gap-2">
       {LEVELS.map((lvl) => {
         const r = RISK[lvl]
         const n = ward.filter((a) => a.risk_level === lvl).length
         return (
-          <div key={lvl} className={cn("flex items-center gap-2 rounded-sm px-3 py-1.5", r.tint)}>
+          <button
+            key={lvl}
+            onClick={() => onToggle(lvl)}
+            className={cn(
+              "flex items-center gap-2 rounded-sm px-3 py-1.5 transition-all hover:brightness-95",
+              r.tint,
+              active === lvl && "ring-2 ring-offset-1 ring-primary",
+              active && active !== lvl && "opacity-45",
+            )}
+          >
             <span className={cn("size-2 rounded-full", r.dot)} />
             <span className={cn("text-2xl font-bold tabular-nums leading-none", r.text)}>{n}</span>
             <span className={cn("text-[0.7rem] font-semibold uppercase tracking-wide", r.text)}>{lvl}</span>
-          </div>
+          </button>
         )
       })}
     </div>
@@ -355,6 +368,8 @@ export default function App() {
   const [ward, setWard] = useState<Alert[] | null>(null)
   const [selected, setSelected] = useState<Alert | null>(null)
   const [detail, setDetail] = useState<Alert | null>(null)  // full-detail modal
+  const [search, setSearch] = useState("")                  // filter by patient id
+  const [riskFilter, setRiskFilter] = useState<RiskLevel | null>(null)
   const [err, setErr] = useState("")
 
   useEffect(() => {
@@ -401,9 +416,18 @@ export default function App() {
         {err && <p className="text-[0.8125rem] text-risk-high">{err}</p>}
         {!ward && !err && <p className="text-[0.8125rem] text-muted-foreground">Loading ward…</p>}
 
-        {ward && (
+        {ward && (() => {
+          const q = search.trim().toLowerCase()
+          const filtered = ward.filter(
+            (a) => (!riskFilter || a.risk_level === riskFilter) && a.patient_id.toLowerCase().includes(q),
+          )
+          return (
           <>
-            <TriageSummary ward={ward} />
+            <TriageSummary
+              ward={ward}
+              active={riskFilter}
+              onToggle={(l) => setRiskFilter((cur) => (cur === l ? null : l))}
+            />
             <div className="grid gap-8 lg:grid-cols-[minmax(0,360px)_1fr]">
               <div>
                 <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -414,11 +438,27 @@ export default function App() {
                   : <p className="text-[0.8125rem] text-muted-foreground">Select a patient from the ward →</p>}
               </div>
               <div>
-                <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Ward · {ward.length} patients · highest risk first
-                </p>
+                <div className="mb-3 flex flex-wrap items-center gap-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Ward · {filtered.length}{filtered.length !== ward.length && ` of ${ward.length}`} patients
+                    {!riskFilter && !q && " · highest risk first"}
+                  </p>
+                  <input
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Search patient id…"
+                    className="ml-auto h-8 w-44 rounded-sm border border-border bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  />
+                  {(riskFilter || q) && (
+                    <button onClick={() => { setRiskFilter(null); setSearch("") }}
+                      className="text-xs font-medium text-primary hover:underline">clear</button>
+                  )}
+                </div>
                 <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(300px,1fr))]">
-                  {ward.map((a, i) => (
+                  {filtered.length === 0 && (
+                    <p className="text-[0.8125rem] text-muted-foreground">No patients match.</p>
+                  )}
+                  {filtered.map((a, i) => (
                     <AlertCard key={i} a={a} onClick={() => { setSelected(a); setDetail(a) }}
                       selected={selected?.patient_id === a.patient_id} />
                   ))}
@@ -426,7 +466,8 @@ export default function App() {
               </div>
             </div>
           </>
-        )}
+          )
+        })()}
       </main>
 
       {detail && <PatientDetail a={detail} onClose={() => setDetail(null)} />}
