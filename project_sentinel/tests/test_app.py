@@ -88,11 +88,19 @@ def test_predict_all_missing_labs_still_scores(sample_body):
     _assert_valid_alert(r.json())
 
 
-def test_predict_missing_features_rejected(sample_body):
+def test_predict_accepts_partial_input(sample_body):
+    # A manual form or EHR feed rarely has all 205 features. Partial input is now
+    # accepted — missing features are treated as NaN — and still returns an alert.
     body = copy.deepcopy(sample_body)
     body.pop(STAGE2_FEATURES[0])
     r = client.post("/predict", json=body)
-    assert r.status_code == 422
+    assert r.status_code == 200
+    assert "risk_level" in r.json()
+
+    # A tiny handful of fields must also work (the form's realistic minimum).
+    r2 = client.post("/predict", json={"Creatinine": 3.2, "HR": 110, "Age": 72, "urine_rate": 0.3})
+    assert r2.status_code == 200
+    assert r2.json()["risk_level"] in {"HIGH", "MEDIUM", "LOW", "INDETERMINATE"}
 
 
 def test_predict_non_numeric_rejected(sample_body):

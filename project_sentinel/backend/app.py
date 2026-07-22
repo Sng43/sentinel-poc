@@ -118,14 +118,13 @@ def predict(patient: dict[str, Any]) -> dict:
     None is fine (unobserved labs are NaN by design — the model treats NaN as
     missing). Typing the body as float-only would 422 on those legitimate cases.
     """
-    missing = [f for f in STAGE2_FEATURES if f not in patient]
-    if missing:
-        raise HTTPException(422, f"Missing {len(missing)} features, e.g. {missing[:5]}")
-
-    # slice to the model's columns; astype float64 so None→NaN and all-null
-    # columns are float (not object), which LightGBM requires.
+    # Accept PARTIAL input: a manual form or an EHR feed rarely has all 205
+    # features. Fill whatever's absent with NaN (the model treats it as missing);
+    # extra keys (patient_id, hospital_system, …) are ignored. astype float64 so
+    # None→NaN and all-null columns are float (not object), which LightGBM requires.
+    full = {f: patient.get(f) for f in STAGE2_FEATURES}
     try:
-        row = pd.DataFrame([patient])[STAGE2_FEATURES].astype("float64")
+        row = pd.DataFrame([full])[STAGE2_FEATURES].astype("float64")
     except (ValueError, TypeError) as e:
         raise HTTPException(422, f"Non-numeric feature value: {e}")
 

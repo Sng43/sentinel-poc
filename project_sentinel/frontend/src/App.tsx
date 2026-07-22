@@ -4,7 +4,6 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
-import { Textarea } from "@/components/ui/textarea"
 
 // Same-origin in production (the backend serves this built SPA). Local dev points
 // at the :8000 backend via frontend/.env.development. ponytail: env over hardcode.
@@ -172,19 +171,83 @@ function parseRow(filename: string, text: string): Record<string, unknown> {
   return obj
 }
 
-// MANUAL mode — type / upload / edit a patient-hour and score it. The demo path.
+// Clinical inputs a user can enter by hand — the raw, commonly-available measurements
+// with full names + units. Derived features (rolling / velocity / SOFA) are omitted:
+// they're computed offline or left missing, which the model tolerates.
+const FORM_SECTIONS: {
+  title: string
+  fields: { key: string; label: string; unit?: string; select?: [string, string][] }[]
+}[] = [
+  { title: "Patient", fields: [
+    { key: "Age", label: "Age", unit: "yr" },
+    { key: "Gender", label: "Sex", select: [["1", "Male"], ["0", "Female"]] },
+    { key: "weight_kg", label: "Weight", unit: "kg" },
+  ]},
+  { title: "Vitals", fields: [
+    { key: "HR", label: "Heart rate", unit: "bpm" },
+    { key: "SBP", label: "Systolic BP", unit: "mmHg" },
+    { key: "DBP", label: "Diastolic BP", unit: "mmHg" },
+    { key: "MAP", label: "Mean arterial pressure", unit: "mmHg" },
+    { key: "Resp", label: "Respiratory rate", unit: "/min" },
+    { key: "O2Sat", label: "Oxygen saturation", unit: "%" },
+    { key: "Temp", label: "Temperature", unit: "°C" },
+  ]},
+  { title: "Renal · KDIGO", fields: [
+    { key: "Creatinine", label: "Creatinine", unit: "mg/dL" },
+    { key: "baseline_creatinine", label: "Baseline creatinine", unit: "mg/dL" },
+    { key: "BUN", label: "Blood urea nitrogen", unit: "mg/dL" },
+    { key: "urine_rate", label: "Urine output", unit: "mL/kg/h" },
+  ]},
+  { title: "Labs", fields: [
+    { key: "Lactate", label: "Lactate", unit: "mmol/L" },
+    { key: "WBC", label: "White cell count", unit: "10³/µL" },
+    { key: "Platelets", label: "Platelets", unit: "10³/µL" },
+    { key: "Hgb", label: "Hemoglobin", unit: "g/dL" },
+    { key: "Potassium", label: "Potassium", unit: "mmol/L" },
+    { key: "HCO3", label: "Bicarbonate", unit: "mmol/L" },
+    { key: "Glucose", label: "Glucose", unit: "mg/dL" },
+    { key: "Bilirubin_total", label: "Total bilirubin", unit: "mg/dL" },
+    { key: "pH", label: "Arterial pH" },
+  ]},
+]
+const FORM_KEYS = FORM_SECTIONS.flatMap((s) => s.fields.map((f) => f.key))
+
+// MANUAL mode — a friendly clinical form (not raw JSON). Enter what you have; the
+// model treats the rest as missing. Load-sample / upload prefill the fields.
 function ManualScorer({ onScored }: { onScored: (a: Alert) => void }) {
-  const [text, setText] = useState("")
+  const [vals, setVals] = useState<Record<string, string>>({})
   const [err, setErr] = useState(""); const [busy, setBusy] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
+  const set = (k: string, v: string) => setVals((p) => ({ ...p, [k]: v }))
 
-  async function score(payload?: string) {
-    const src = payload ?? text
+  function fillFrom(row: Record<string, unknown>) {
+    const next: Record<string, string> = {}
+    for (const k of FORM_KEYS) {
+      const v = row[k]
+      if (v !== null && v !== undefined && v !== "" && !Number.isNaN(Number(v))) {
+        next[k] = String(Math.round(Number(v) * 100) / 100)  // trim float noise for display
+      }
+    }
+    setVals(next)
+  }
+  async function loadSample() {
+    setErr("")
+    try { fillFrom(await (await fetch(`${API}/sample`)).json()) }
+    catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
+  }
+  async function onUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]; e.target.value = ""
+    if (!file) return; setErr("")
+    try { fillFrom(parseRow(file.name, await file.text())) }
+    catch (err) { setErr(`Could not parse ${file.name}: ${err instanceof Error ? err.message : String(err)}`) }
+  }
+  async function score() {
     setErr(""); setBusy(true)
+    const payload: Record<string, number | null> = {}
+    for (const k of FORM_KEYS) { const v = vals[k]; payload[k] = v === undefined || v === "" ? null : Number(v) }
     try {
       const res = await fetch(`${API}/predict`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(JSON.parse(src)),
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.detail || "Request failed")
@@ -192,39 +255,48 @@ function ManualScorer({ onScored }: { onScored: (a: Alert) => void }) {
     } catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
     finally { setBusy(false) }
   }
-  async function loadSample() {
-    setErr("")
-    const row = await (await fetch(`${API}/sample`)).json()
-    const pretty = JSON.stringify(row, null, 2); setText(pretty); score(pretty)
-  }
-  async function onUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]; e.target.value = ""
-    if (!file) return; setErr("")
-    try {
-      const pretty = JSON.stringify(parseRow(file.name, await file.text()), null, 2)
-      setText(pretty); score(pretty)
-    } catch (err) { setErr(`Could not parse ${file.name}: ${err instanceof Error ? err.message : String(err)}`) }
-  }
 
+  const inputCls = "h-9 w-full rounded-sm border border-border bg-background px-2.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
   return (
     <Card className="mb-8 p-6">
-      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Manual entry — score a patient-hour</p>
-      <p className="text-[0.8125rem] text-muted-foreground">
-        Load a sample, upload a row (.json / .csv), or edit the values and re-score. For demo / what-if analysis.
-      </p>
-      <div className="flex flex-wrap items-center gap-3">
-        <Button variant="outline" onClick={loadSample}>Load sample</Button>
-        <Button variant="outline" onClick={() => fileRef.current?.click()}>
-          <Upload className="size-4" /> Upload row
-        </Button>
-        <input ref={fileRef} type="file" accept=".json,.csv" onChange={onUpload} className="hidden" />
-        <Button onClick={() => score()} disabled={!text || busy}>{busy ? "Scoring…" : "Score"}</Button>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Manual entry — assess a patient</p>
+          <p className="text-[0.8125rem] text-muted-foreground">Enter the values you have; leave the rest blank — the model handles missing data.</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <Button variant="outline" onClick={loadSample}>Load sample</Button>
+          <Button variant="outline" onClick={() => fileRef.current?.click()}><Upload className="size-4" /> Upload</Button>
+          <input ref={fileRef} type="file" accept=".json,.csv" onChange={onUpload} className="hidden" />
+        </div>
+      </div>
+
+      <div className="mt-5 grid gap-x-8 gap-y-5 sm:grid-cols-2 lg:grid-cols-4">
+        {FORM_SECTIONS.map((s) => (
+          <div key={s.title}>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{s.title}</p>
+            <div className="flex flex-col gap-2.5">
+              {s.fields.map((f) => (
+                <label key={f.key} className="flex flex-col gap-1 text-[0.8125rem] text-muted-foreground">
+                  <span>{f.label}{f.unit && <span className="text-muted-foreground/60"> ({f.unit})</span>}</span>
+                  {f.select
+                    ? <select className={inputCls} value={vals[f.key] ?? ""} onChange={(e) => set(f.key, e.target.value)}>
+                        <option value="">—</option>
+                        {f.select.map(([v, lab]) => <option key={v} value={v}>{lab}</option>)}
+                      </select>
+                    : <input type="number" step="any" className={inputCls} placeholder="—"
+                        value={vals[f.key] ?? ""} onChange={(e) => set(f.key, e.target.value)} />}
+                </label>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-5 flex items-center gap-3">
+        <Button onClick={score} disabled={busy}>{busy ? "Scoring…" : "Assess patient"}</Button>
         {err && <span className="text-[0.8125rem] text-risk-high">{err}</span>}
       </div>
-      {text && (
-        <Textarea value={text} onChange={(e) => setText(e.target.value)} spellCheck={false}
-          className="min-h-32 font-mono text-xs" />
-      )}
     </Card>
   )
 }
