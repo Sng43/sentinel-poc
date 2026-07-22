@@ -57,16 +57,26 @@ app.add_middleware(  # ponytail: wide-open CORS, fine for a localhost PoC demo
 )
 
 
+def _with_features(alert: dict, row: pd.Series) -> dict:
+    """Attach the patient's full raw feature values so the UI can show every detail.
+    NaN → None (unobserved labs) so the JSON is valid."""
+    alert["features"] = {
+        k: (None if pd.isna(v) else round(float(v), 4)) for k, v in row.items()
+    }
+    return alert
+
+
 def _alert(idx: int) -> dict:
     """Build a clinical alert for positional row `idx` of the in-memory test set."""
     row = _X.iloc[idx]
     sv = EXPLAINER.shap_values(_X.iloc[[idx]])
     sv = sv[1] if isinstance(sv, list) else sv
-    return generate_clinical_alert(
+    alert = generate_clinical_alert(
         model=MODEL, explainer=EXPLAINER, shap_values_single=sv[0],
         patient_row=row, feature_names=STAGE2_FEATURES,
         prediction_prob=float(_PROBS[idx]), threshold=THRESHOLD, conformal_qhat=QHAT,
     )
+    return _with_features(alert, row)
 
 
 @app.get("/health")
@@ -130,7 +140,7 @@ def predict(patient: dict[str, Any]) -> dict:
     sv = EXPLAINER.shap_values(row)
     sv = sv[1] if isinstance(sv, list) else sv  # LightGBM binary → list[class0, class1]
 
-    return generate_clinical_alert(
+    alert = generate_clinical_alert(
         model=MODEL,
         explainer=EXPLAINER,
         shap_values_single=sv[0],
@@ -140,6 +150,7 @@ def predict(patient: dict[str, Any]) -> dict:
         threshold=THRESHOLD,
         conformal_qhat=QHAT,
     )
+    return _with_features(alert, row.iloc[0])
 
 
 @app.get("/ehr/{patient_id}")

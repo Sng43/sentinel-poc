@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react"
-import { Upload, Activity, Database, Keyboard } from "lucide-react"
+import { Upload, Activity, Database, Keyboard, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -21,8 +21,36 @@ type Alert = {
   aki_probability_24h: string
   top_contributors: Contributor[]
   recommended_action: string
+  features?: Record<string, number | null>  // full raw feature values (for the detail view)
 }
 type Config = { manual_entry: boolean; ehr_connected: boolean; ehr_url: string | null; n_features: number }
+
+// Clinically meaningful raw measurements shown in the patient-detail view, grouped.
+// [featureKey, human label, unit]. Derived/rolling features are omitted here — the
+// detail view is the patient's clinical picture, not all 205 engineered columns.
+const DETAIL_GROUPS: { title: string; items: [string, string, string][] }[] = [
+  { title: "Vitals", items: [
+    ["HR", "Heart rate", "bpm"], ["SBP", "Systolic BP", "mmHg"], ["DBP", "Diastolic BP", "mmHg"],
+    ["MAP", "Mean arterial P.", "mmHg"], ["Resp", "Resp. rate", "/min"], ["O2Sat", "SpO₂", "%"], ["Temp", "Temp", "°C"],
+  ]},
+  { title: "Renal · KDIGO", items: [
+    ["Creatinine", "Creatinine", "mg/dL"], ["baseline_creatinine", "Baseline creatinine", "mg/dL"],
+    ["cr_above_baseline", "Δ above baseline", "mg/dL"], ["creatinine_velocity_12h", "Creatinine velocity", "/12h"],
+    ["BUN", "BUN", "mg/dL"], ["urine_rate", "Urine output", "mL/kg/h"],
+  ]},
+  { title: "Labs", items: [
+    ["Lactate", "Lactate", "mmol/L"], ["WBC", "WBC", "10³/µL"], ["Platelets", "Platelets", "10³/µL"],
+    ["Hgb", "Hemoglobin", "g/dL"], ["Potassium", "Potassium", "mmol/L"], ["HCO3", "Bicarbonate", "mmol/L"],
+    ["Bilirubin_total", "Bilirubin", "mg/dL"], ["pH", "pH", ""],
+  ]},
+  { title: "Risk factors", items: [
+    ["sofa_partial", "SOFA (partial)", "pts"], ["nephrotoxin_active", "Nephrotoxin active", "0/1"],
+    ["hours_since_nephrotoxin", "Since nephrotoxin", "h"], ["hours_since_sepsis", "Since sepsis onset", "h"],
+  ]},
+  { title: "Patient", items: [
+    ["Age", "Age", "yr"], ["Gender", "Sex (1 = M)", ""], ["weight_kg", "Weight", "kg"],
+  ]},
+]
 
 // Static class strings (not template-built) so Tailwind's scanner emits them.
 const RISK: Record<RiskLevel, { text: string; border: string; tint: string; dot: string }> = {
@@ -254,11 +282,79 @@ function ModeToggle({ mode, setMode }: { mode: Mode; setMode: (m: Mode) => void 
   )
 }
 
+// Full patient detail — opens on card click. Shows the risk header, every SHAP
+// contributor, and the patient's grouped clinical values (not just the card's top-3).
+function PatientDetail({ a, onClose }: { a: Alert; onClose: () => void }) {
+  const r = RISK[a.risk_level] ?? RISK.INDETERMINATE
+  const maxImpact = Math.max(...a.top_contributors.map((c) => Math.abs(c.shap_impact)), 1)
+  const f = a.features ?? {}
+  const fmt = (v: number | null | undefined) =>
+    v === null || v === undefined ? "—" : Number.isInteger(v) ? String(v) : v.toFixed(2)
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 sm:p-8"
+      onClick={onClose}>
+      <Card className={cn("w-full max-w-3xl gap-0 border-l-4 p-6", r.border)} onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-lg font-semibold">Patient {a.patient_id}</p>
+            <span className="text-xs text-muted-foreground/70">Sepsis-Associated AKI · 24h horizon</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <Badge variant="outline" className={cn("gap-1.5 border-transparent font-semibold tracking-wide", r.tint, r.text)}>
+              <span className={cn("size-2 rounded-full", r.dot)} /> {a.risk_level}
+            </Badge>
+            <button onClick={onClose} className="rounded-sm p-1 text-muted-foreground hover:bg-muted" aria-label="Close">
+              <X className="size-5" />
+            </button>
+          </div>
+        </div>
+
+        <div className="my-4 flex items-baseline gap-3">
+          <span className={cn("text-[2.5rem] font-bold leading-none tabular-nums", r.text)}>{a.risk_score}</span>
+          <span className="text-sm text-muted-foreground tabular-nums">{a.aki_probability_24h} probability of AKI</span>
+        </div>
+
+        {/* clinical values, grouped */}
+        <div className="grid gap-x-8 gap-y-5 sm:grid-cols-2">
+          {DETAIL_GROUPS.map((g) => (
+            <div key={g.title}>
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{g.title}</p>
+              <div className="flex flex-col gap-1">
+                {g.items.map(([key, label, unit]) => (
+                  <div key={key} className="flex items-baseline justify-between gap-3 border-b border-border/60 py-1 text-sm">
+                    <span className="text-muted-foreground">{label}</span>
+                    <span className={cn("tabular-nums", f[key] == null && "text-muted-foreground/50")}>
+                      {fmt(f[key])} <span className="text-xs text-muted-foreground/60">{unit}</span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* full SHAP explanation */}
+        <p className="mt-6 mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Why this risk — model factors (SHAP)
+        </p>
+        <div className="flex flex-col gap-3">
+          {a.top_contributors.map((c, i) => <ContributorRow key={i} c={c} maxImpact={maxImpact} />)}
+        </div>
+
+        <div className={cn("mt-5 rounded-sm border-l-[3px] p-3 text-[0.8125rem]", r.tint, r.border)}>
+          <span className="font-semibold">Recommended action: </span>{a.recommended_action}
+        </div>
+      </Card>
+    </div>
+  )
+}
+
 export default function App() {
   const [config, setConfig] = useState<Config | null>(null)
   const [mode, setMode] = useState<Mode>("ehr")
   const [ward, setWard] = useState<Alert[] | null>(null)
   const [selected, setSelected] = useState<Alert | null>(null)
+  const [detail, setDetail] = useState<Alert | null>(null)  // full-detail modal
   const [err, setErr] = useState("")
 
   useEffect(() => {
@@ -299,8 +395,8 @@ export default function App() {
         )}
 
         {config && (mode === "manual"
-          ? <ManualScorer onScored={setSelected} />
-          : <EhrPanel config={config} onScored={setSelected} />)}
+          ? <ManualScorer onScored={(a) => { setSelected(a); setDetail(a) }} />
+          : <EhrPanel config={config} onScored={(a) => { setSelected(a); setDetail(a) }} />)}
 
         {err && <p className="text-[0.8125rem] text-risk-high">{err}</p>}
         {!ward && !err && <p className="text-[0.8125rem] text-muted-foreground">Loading ward…</p>}
@@ -310,9 +406,11 @@ export default function App() {
             <TriageSummary ward={ward} />
             <div className="grid gap-8 lg:grid-cols-[minmax(0,360px)_1fr]">
               <div>
-                <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Selected patient</p>
+                <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Selected patient <span className="normal-case text-muted-foreground/60">· click for full detail</span>
+                </p>
                 {selected
-                  ? <AlertCard a={selected} />
+                  ? <AlertCard a={selected} onClick={() => setDetail(selected)} />
                   : <p className="text-[0.8125rem] text-muted-foreground">Select a patient from the ward →</p>}
               </div>
               <div>
@@ -321,7 +419,7 @@ export default function App() {
                 </p>
                 <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(300px,1fr))]">
                   {ward.map((a, i) => (
-                    <AlertCard key={i} a={a} onClick={() => setSelected(a)}
+                    <AlertCard key={i} a={a} onClick={() => { setSelected(a); setDetail(a) }}
                       selected={selected?.patient_id === a.patient_id} />
                   ))}
                 </div>
@@ -330,6 +428,8 @@ export default function App() {
           </>
         )}
       </main>
+
+      {detail && <PatientDetail a={detail} onClose={() => setDetail(null)} />}
     </div>
   )
 }
