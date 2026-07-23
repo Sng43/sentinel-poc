@@ -22,7 +22,7 @@ type Alert = {
   recommended_action: string
   features?: Record<string, number | null>  // full raw feature values (for the detail view)
 }
-type Config = { manual_entry: boolean; ehr_connected: boolean; ehr_url: string | null; n_features: number }
+type Config = { manual_entry: boolean; ehr_connected: boolean; ehr_url: string | null; n_features: number; features: string[] }
 
 // Clinically meaningful raw measurements shown in the patient-detail view, grouped.
 // [featureKey, human label, unit]. Derived/rolling features are omitted here — the
@@ -203,29 +203,56 @@ const FORM_SECTIONS: {
     { key: "WBC", label: "White cell count", unit: "10³/µL" },
     { key: "Platelets", label: "Platelets", unit: "10³/µL" },
     { key: "Hgb", label: "Hemoglobin", unit: "g/dL" },
+    { key: "Hct", label: "Hematocrit", unit: "%" },
     { key: "Potassium", label: "Potassium", unit: "mmol/L" },
     { key: "HCO3", label: "Bicarbonate", unit: "mmol/L" },
     { key: "Glucose", label: "Glucose", unit: "mg/dL" },
     { key: "Bilirubin_total", label: "Total bilirubin", unit: "mg/dL" },
     { key: "pH", label: "Arterial pH" },
   ]},
+  { title: "More labs", fields: [
+    { key: "Chloride", label: "Chloride", unit: "mmol/L" },
+    { key: "Calcium", label: "Calcium", unit: "mg/dL" },
+    { key: "Magnesium", label: "Magnesium", unit: "mg/dL" },
+    { key: "Phosphate", label: "Phosphate", unit: "mg/dL" },
+    { key: "AST", label: "AST", unit: "U/L" },
+    { key: "Alkalinephos", label: "Alkaline phosphatase", unit: "U/L" },
+    { key: "PaCO2", label: "PaCO₂", unit: "mmHg" },
+    { key: "SaO2", label: "SaO₂", unit: "%" },
+    { key: "BaseExcess", label: "Base excess", unit: "mmol/L" },
+    { key: "PTT", label: "PTT", unit: "s" },
+    { key: "Fibrinogen", label: "Fibrinogen", unit: "mg/dL" },
+  ]},
+  { title: "Context / risk", fields: [
+    { key: "creatinine_velocity_12h", label: "Creatinine velocity", unit: "/12h" },
+    { key: "sofa_partial", label: "SOFA score (partial)", unit: "pts" },
+    { key: "nephrotoxin_active", label: "Nephrotoxin given", select: [["1", "Yes"], ["0", "No"]] },
+    { key: "hours_since_nephrotoxin", label: "Hours since nephrotoxin", unit: "h" },
+    { key: "hours_since_sepsis", label: "Hours since sepsis onset", unit: "h" },
+  ]},
 ]
 const FORM_KEYS = FORM_SECTIONS.flatMap((s) => s.fields.map((f) => f.key))
 
 // MANUAL mode — a friendly clinical form (not raw JSON). Enter what you have; the
 // model treats the rest as missing. Load-sample / upload prefill the fields.
-function ManualScorer({ onScored }: { onScored: (a: Alert) => void }) {
+function ManualScorer({ onScored, allFeatures }: { onScored: (a: Alert) => void; allFeatures: string[] }) {
   const [vals, setVals] = useState<Record<string, string>>({})
   const [err, setErr] = useState(""); const [busy, setBusy] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
   const set = (k: string, v: string) => setVals((p) => ({ ...p, [k]: v }))
 
+  // every model feature not already in a friendly section — kept in the "advanced"
+  // panel so NO field from the raw JSON is dropped (rolling stats, SOFA sub-scores,
+  // missingness flags, composites…).
+  const advancedKeys = allFeatures.filter((k) => !FORM_KEYS.includes(k))
+  const keys = allFeatures.length ? allFeatures : FORM_KEYS
+
   function fillFrom(row: Record<string, unknown>) {
     const next: Record<string, string> = {}
-    for (const k of FORM_KEYS) {
+    for (const k of keys) {
       const v = row[k]
       if (v !== null && v !== undefined && v !== "" && !Number.isNaN(Number(v))) {
-        next[k] = String(Math.round(Number(v) * 100) / 100)  // trim float noise for display
+        next[k] = String(Math.round(Number(v) * 1000) / 1000)  // trim float noise for display
       }
     }
     setVals(next)
@@ -244,7 +271,7 @@ function ManualScorer({ onScored }: { onScored: (a: Alert) => void }) {
   async function score() {
     setErr(""); setBusy(true)
     const payload: Record<string, number | null> = {}
-    for (const k of FORM_KEYS) { const v = vals[k]; payload[k] = v === undefined || v === "" ? null : Number(v) }
+    for (const k of keys) { const v = vals[k]; payload[k] = v === undefined || v === "" ? null : Number(v) }
     try {
       const res = await fetch(`${API}/predict`, {
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
@@ -292,6 +319,23 @@ function ManualScorer({ onScored }: { onScored: (a: Alert) => void }) {
           </div>
         ))}
       </div>
+
+      {advancedKeys.length > 0 && (
+        <details className="mt-6 rounded-[10px] border border-border">
+          <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-muted-foreground">
+            Advanced — all other features ({advancedKeys.length}) · rolling windows, SOFA sub-scores, missingness flags, composites
+          </summary>
+          <div className="grid gap-x-6 gap-y-3 border-t border-border p-5 sm:grid-cols-3 lg:grid-cols-4">
+            {advancedKeys.map((k) => (
+              <label key={k} className="flex flex-col gap-1 text-xs text-muted-foreground">
+                <span className="truncate font-mono" title={k}>{k}</span>
+                <input type="number" step="any" className={inputCls} placeholder="—"
+                  value={vals[k] ?? ""} onChange={(e) => set(k, e.target.value)} />
+              </label>
+            ))}
+          </div>
+        </details>
+      )}
 
       <div className="mt-5 flex items-center gap-3">
         <Button onClick={score} disabled={busy}>{busy ? "Scoring…" : "Assess patient"}</Button>
@@ -482,7 +526,7 @@ export default function App() {
         )}
 
         {config && (mode === "manual"
-          ? <ManualScorer onScored={(a) => { setSelected(a); setDetail(a) }} />
+          ? <ManualScorer allFeatures={config.features ?? []} onScored={(a) => { setSelected(a); setDetail(a) }} />
           : <EhrPanel config={config} onScored={(a) => { setSelected(a); setDetail(a) }} />)}
 
         {err && <p className="text-[0.8125rem] text-risk-high">{err}</p>}

@@ -92,6 +92,7 @@ def config() -> dict[str, Any]:
         "ehr_connected": EHR_FHIR_URL is not None,
         "ehr_url": EHR_FHIR_URL,       # shown to the user; None when not configured
         "n_features": len(STAGE2_FEATURES),
+        "features": STAGE2_FEATURES,   # full list so the manual form can render every field
     }
 
 
